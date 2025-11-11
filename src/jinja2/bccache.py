@@ -62,9 +62,10 @@ class Bucket:
 
     def load_bytecode(self, f: t.BinaryIO) -> None:
         """Loads bytecode from a file or file like object."""
+        local_bc_magic = bc_magic
         # make sure the magic header is correct
-        magic = f.read(len(bc_magic))
-        if magic != bc_magic:
+        magic = f.read(len(local_bc_magic))
+        if magic != local_bc_magic:
             self.reset()
             return
         # the source code of the file changed, we need to reload
@@ -81,11 +82,12 @@ class Bucket:
 
     def write_bytecode(self, f: t.IO[bytes]) -> None:
         """Dump the bytecode into the file or file like object passed."""
-        if self.code is None:
+        code = self.code
+        if code is None:
             raise TypeError("can't write empty bucket")
         f.write(bc_magic)
         pickle.dump(self.checksum, f, 2)
-        marshal.dump(self.code, f)
+        marshal.dump(code, f)
 
     def bytecode_from_string(self, string: bytes) -> None:
         """Load bytecode from bytes."""
@@ -149,12 +151,12 @@ class BytecodeCache:
 
     def get_cache_key(self, name: str, filename: str | None = None) -> str:
         """Returns the unique hash key for this template name."""
-        hash = sha1(name.encode("utf-8"))
+        hash_obj = sha1(name.encode("utf-8"))
 
         if filename is not None:
-            hash.update(f"|{filename}".encode())
+            hash_obj.update(f"|{filename}".encode())
 
-        return hash.hexdigest()
+        return hash_obj.hexdigest()
 
     def get_source_checksum(self, source: str) -> str:
         """Returns a checksum for the source."""
@@ -223,7 +225,8 @@ class FileSystemBytecodeCache(BytecodeCache):
         if not hasattr(os, "getuid"):
             _unsafe_dir()
 
-        dirname = f"_jinja2-cache-{os.getuid()}"
+        getuid = os.getuid()
+        dirname = f"_jinja2-cache-{getuid}"
         actual_dir = os.path.join(tmpdir, dirname)
 
         try:
@@ -234,10 +237,12 @@ class FileSystemBytecodeCache(BytecodeCache):
         try:
             os.chmod(actual_dir, stat.S_IRWXU)
             actual_dir_stat = os.lstat(actual_dir)
+            st_uid = actual_dir_stat.st_uid
+            st_mode = actual_dir_stat.st_mode
             if (
-                actual_dir_stat.st_uid != os.getuid()
-                or not stat.S_ISDIR(actual_dir_stat.st_mode)
-                or stat.S_IMODE(actual_dir_stat.st_mode) != stat.S_IRWXU
+                st_uid != getuid
+                or not stat.S_ISDIR(st_mode)
+                or stat.S_IMODE(st_mode) != stat.S_IRWXU
             ):
                 _unsafe_dir()
         except OSError as e:
@@ -245,10 +250,12 @@ class FileSystemBytecodeCache(BytecodeCache):
                 raise
 
         actual_dir_stat = os.lstat(actual_dir)
+        st_uid = actual_dir_stat.st_uid
+        st_mode = actual_dir_stat.st_mode
         if (
-            actual_dir_stat.st_uid != os.getuid()
-            or not stat.S_ISDIR(actual_dir_stat.st_mode)
-            or stat.S_IMODE(actual_dir_stat.st_mode) != stat.S_IRWXU
+            st_uid != getuid
+            or not stat.S_ISDIR(st_mode)
+            or stat.S_IMODE(st_mode) != stat.S_IRWXU
         ):
             _unsafe_dir()
 
@@ -259,28 +266,23 @@ class FileSystemBytecodeCache(BytecodeCache):
 
     def load_bytecode(self, bucket: Bucket) -> None:
         filename = self._get_cache_filename(bucket)
-
-        # Don't test for existence before opening the file, since the
-        # file could disappear after the test before the open.
+        open_func = open
         try:
-            f = open(filename, "rb")
+            f = open_func(filename, "rb")
         except (FileNotFoundError, IsADirectoryError, PermissionError):
-            # PermissionError can occur on Windows when an operation is
-            # in progress, such as calling clear().
             return
 
         with f:
             bucket.load_bytecode(f)
 
     def dump_bytecode(self, bucket: Bucket) -> None:
-        # Write to a temporary file, then rename to the real name after
-        # writing. This avoids another process reading the file before
-        # it is fully written.
         name = self._get_cache_filename(bucket)
+        dirname = os.path.dirname(name)
+        basename = os.path.basename(name)
         f = tempfile.NamedTemporaryFile(
             mode="wb",
-            dir=os.path.dirname(name),
-            prefix=os.path.basename(name),
+            dir=dirname,
+            prefix=basename,
             suffix=".tmp",
             delete=False,
         )
@@ -289,8 +291,6 @@ class FileSystemBytecodeCache(BytecodeCache):
             try:
                 os.remove(f.name)
             except OSError:
-                # Another process may have called clear(). On Windows,
-                # another program may be holding the file open.
                 pass
 
         try:
@@ -303,23 +303,20 @@ class FileSystemBytecodeCache(BytecodeCache):
         try:
             os.replace(f.name, name)
         except OSError:
-            # Another process may have called clear(). On Windows,
-            # another program may be holding the file open.
             remove_silent()
         except BaseException:
             remove_silent()
             raise
 
     def clear(self) -> None:
-        # imported lazily here because google app-engine doesn't support
-        # write access on the file system and the function does not exist
-        # normally.
         from os import remove
-
-        files = fnmatch.filter(os.listdir(self.directory), self.pattern % ("*",))
+        directory = self.directory
+        pattern = self.pattern
+        files = fnmatch.filter(os.listdir(directory), pattern % ("*",))
+        remove_path = os.path.join
         for filename in files:
             try:
-                remove(os.path.join(self.directory, filename))
+                remove(remove_path(directory, filename))
             except OSError:
                 pass
 
@@ -382,8 +379,11 @@ class MemcachedBytecodeCache(BytecodeCache):
         self.ignore_memcache_errors = ignore_memcache_errors
 
     def load_bytecode(self, bucket: Bucket) -> None:
+        client = self.client
+        prefix = self.prefix
+        key = prefix + bucket.key
         try:
-            code = self.client.get(self.prefix + bucket.key)
+            code = client.get(key)
         except Exception:
             if not self.ignore_memcache_errors:
                 raise
@@ -391,14 +391,17 @@ class MemcachedBytecodeCache(BytecodeCache):
             bucket.bytecode_from_string(code)
 
     def dump_bytecode(self, bucket: Bucket) -> None:
-        key = self.prefix + bucket.key
+        client = self.client
+        prefix = self.prefix
+        key = prefix + bucket.key
         value = bucket.bytecode_to_string()
 
         try:
-            if self.timeout is not None:
-                self.client.set(key, value, self.timeout)
+            timeout = self.timeout
+            if timeout is not None:
+                client.set(key, value, timeout)
             else:
-                self.client.set(key, value)
+                client.set(key, value)
         except Exception:
             if not self.ignore_memcache_errors:
                 raise

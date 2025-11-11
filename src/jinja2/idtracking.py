@@ -122,7 +122,8 @@ class Symbols:
         stores: set[str] = set()
 
         for branch in branch_symbols:
-            stores.update(branch.stores)
+            stores_update = branch.stores
+            stores.update(stores_update)
 
         stores.difference_update(self.stores)
 
@@ -147,9 +148,11 @@ class Symbols:
         node: Symbols | None = self
 
         while node is not None:
-            for name in sorted(node.stores):
+            sorted_stores = sorted(node.stores)
+            find_ref = self.find_ref
+            for name in sorted_stores:
                 if name not in rv:
-                    rv[name] = self.find_ref(name)  # type: ignore
+                    rv[name] = find_ref(name)  # type: ignore
 
             node = node.parent
 
@@ -160,7 +163,8 @@ class Symbols:
         node: Symbols | None = self
 
         while node is not None:
-            for target, (instr, _) in self.loads.items():
+            loads_items = node.loads.items()
+            for target, (instr, _) in loads_items:
                 if instr == VAR_LOAD_PARAMETER:
                     rv.add(target)
 

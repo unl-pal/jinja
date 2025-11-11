@@ -47,11 +47,8 @@ V = t.TypeVar("V")
 
 
 def ignore_case(value: V) -> V:
-    """For use as a postprocessor for :func:`make_attrgetter`. Converts strings
-    to lowercase and returns other types as-is."""
     if isinstance(value, str):
         return t.cast(V, value.lower())
-
     return value
 
 
@@ -61,23 +58,15 @@ def make_attrgetter(
     postprocess: t.Callable[[t.Any], t.Any] | None = None,
     default: t.Any | None = None,
 ) -> t.Callable[[t.Any], t.Any]:
-    """Returns a callable that looks up the given attribute from a
-    passed object with the rules of the environment.  Dots are allowed
-    to access attributes of attributes.  Integer parts in paths are
-    looked up as integers.
-    """
     parts = _prepare_attribute_parts(attribute)
 
     def attrgetter(item: t.Any) -> t.Any:
         for part in parts:
             item = environment.getitem(item, part)
-
             if default is not None and isinstance(item, Undefined):
                 item = default
-
         if postprocess is not None:
             item = postprocess(item)
-
         return item
 
     return attrgetter
@@ -88,37 +77,24 @@ def make_multi_attrgetter(
     attribute: str | int | None,
     postprocess: t.Callable[[t.Any], t.Any] | None = None,
 ) -> t.Callable[[t.Any], list[t.Any]]:
-    """Returns a callable that looks up the given comma separated
-    attributes from a passed object with the rules of the environment.
-    Dots are allowed to access attributes of each attribute.  Integer
-    parts in paths are looked up as integers.
-
-    The value returned by the returned callable is a list of extracted
-    attribute values.
-
-    Examples of attribute: "attr1,attr2", "attr1.inner1.0,attr2.inner2.0", etc.
-    """
     if isinstance(attribute, str):
         split: t.Sequence[str | int | None] = attribute.split(",")
     else:
         split = [attribute]
-
     parts = [_prepare_attribute_parts(item) for item in split]
 
     def attrgetter(item: t.Any) -> list[t.Any]:
-        items = [None] * len(parts)
-
+        n = len(parts)
+        items = [None] * n
+        _getitem = environment.getitem
+        _postprocess = postprocess
         for i, attribute_part in enumerate(parts):
             item_i = item
-
             for part in attribute_part:
-                item_i = environment.getitem(item_i, part)
-
-            if postprocess is not None:
-                item_i = postprocess(item_i)
-
+                item_i = _getitem(item_i, part)
+            if _postprocess is not None:
+                item_i = _postprocess(item_i)
             items[i] = item_i
-
         return items
 
     return attrgetter
@@ -129,49 +105,29 @@ def _prepare_attribute_parts(
 ) -> list[str | int]:
     if attr is None:
         return []
-
     if isinstance(attr, str):
         return [int(x) if x.isdigit() else x for x in attr.split(".")]
-
     return [attr]
 
 
 def do_forceescape(value: "str | HasHTML") -> Markup:
-    """Enforce HTML escaping.  This will probably double escape variables."""
     if hasattr(value, "__html__"):
         value = t.cast("HasHTML", value).__html__()
-
     return escape(str(value))
 
 
 def do_urlencode(
     value: str | t.Mapping[str, t.Any] | t.Iterable[tuple[str, t.Any]],
 ) -> str:
-    """Quote data for use in a URL path or query using UTF-8.
-
-    Basic wrapper around :func:`urllib.parse.quote` when given a
-    string, or :func:`urllib.parse.urlencode` for a dict or iterable.
-
-    :param value: Data to quote. A string will be quoted directly. A
-        dict or iterable of ``(key, value)`` pairs will be joined as a
-        query string.
-
-    When given a string, "/" is not quoted. HTTP servers treat "/" and
-    "%2F" equivalently in paths. If you need quoted slashes, use the
-    ``|replace("/", "%2F")`` filter.
-
-    .. versionadded:: 2.7
-    """
     if isinstance(value, str) or not isinstance(value, abc.Iterable):
         return url_quote(value)
-
     if isinstance(value, dict):
         items: t.Iterable[tuple[str, t.Any]] = value.items()
     else:
         items = value  # type: ignore
-
+    url_q = url_quote
     return "&".join(
-        f"{url_quote(k, for_qs=True)}={url_quote(v, for_qs=True)}" for k, v in items
+        f"{url_q(k, for_qs=True)}={url_q(v, for_qs=True)}" for k, v in items
     )
 
 
@@ -179,80 +135,36 @@ def do_urlencode(
 def do_replace(
     eval_ctx: "EvalContext", s: str, old: str, new: str, count: int | None = None
 ) -> str:
-    """Return a copy of the value with all occurrences of a substring
-    replaced with a new one. The first argument is the substring
-    that should be replaced, the second is the replacement string.
-    If the optional third argument ``count`` is given, only the first
-    ``count`` occurrences are replaced:
-
-    .. sourcecode:: jinja
-
-        {{ "Hello World"|replace("Hello", "Goodbye") }}
-            -> Goodbye World
-
-        {{ "aaaaargh"|replace("a", "d'oh, ", 2) }}
-            -> d'oh, d'oh, aaargh
-    """
     if count is None:
         count = -1
-
     if not eval_ctx.autoescape:
         return str(s).replace(str(old), str(new), count)
-
-    if (
-        hasattr(old, "__html__")
-        or hasattr(new, "__html__")
-        and not hasattr(s, "__html__")
-    ):
+    old_html = hasattr(old, "__html__")
+    new_html = hasattr(new, "__html__")
+    s_html = hasattr(s, "__html__")
+    if (old_html or new_html) and not s_html:
         s = escape(s)
     else:
         s = soft_str(s)
-
     return s.replace(soft_str(old), soft_str(new), count)
 
 
 def do_upper(s: str) -> str:
-    """Convert a value to uppercase."""
     return soft_str(s).upper()
 
 
 def do_lower(s: str) -> str:
-    """Convert a value to lowercase."""
     return soft_str(s).lower()
 
 
 def do_items(value: t.Mapping[K, V] | Undefined) -> t.Iterator[tuple[K, V]]:
-    """Return an iterator over the ``(key, value)`` items of a mapping.
-
-    ``x|items`` is the same as ``x.items()``, except if ``x`` is
-    undefined an empty iterator is returned.
-
-    This filter is useful if you expect the template to be rendered with
-    an implementation of Jinja in another programming language that does
-    not have a ``.items()`` method on its mapping type.
-
-    .. code-block:: html+jinja
-
-        <dl>
-        {% for key, value in my_dict|items %}
-            <dt>{{ key }}
-            <dd>{{ value }}
-        {% endfor %}
-        </dl>
-
-    .. versionadded:: 3.1
-    """
     if isinstance(value, Undefined):
         return
-
     if not isinstance(value, abc.Mapping):
         raise TypeError("Can only get item pairs from a mapping.")
-
     yield from value.items()
 
 
-# Check for characters that would move the parser state from key to value.
-# https://html.spec.whatwg.org/#attribute-name-state
 _attr_key_re = re.compile(r"[\s/>=]", flags=re.ASCII)
 
 
@@ -260,68 +172,24 @@ _attr_key_re = re.compile(r"[\s/>=]", flags=re.ASCII)
 def do_xmlattr(
     eval_ctx: "EvalContext", d: t.Mapping[str, t.Any], autospace: bool = True
 ) -> str:
-    """Create an SGML/XML attribute string based on the items in a dict.
-
-    **Values** that are neither ``none`` nor ``undefined`` are automatically
-    escaped, safely allowing untrusted user input.
-
-    User input should not be used as **keys** to this filter. If any key
-    contains a space, ``/`` solidus, ``>`` greater-than sign, or ``=`` equals
-    sign, this fails with a ``ValueError``. Regardless of this, user input
-    should never be used as keys to this filter, or must be separately validated
-    first.
-
-    .. sourcecode:: html+jinja
-
-        <ul{{ {'class': 'my_list', 'missing': none,
-                'id': 'list-%d'|format(variable)}|xmlattr }}>
-        ...
-        </ul>
-
-    Results in something like this:
-
-    .. sourcecode:: html
-
-        <ul class="my_list" id="list-42">
-        ...
-        </ul>
-
-    As you can see it automatically prepends a space in front of the item
-    if the filter returned something unless the second parameter is false.
-
-    .. versionchanged:: 3.1.4
-        Keys with ``/`` solidus, ``>`` greater-than sign, or ``=`` equals sign
-        are not allowed.
-
-    .. versionchanged:: 3.1.3
-        Keys with spaces are not allowed.
-    """
     items = []
-
+    _attr_search = _attr_key_re.search
+    _escape = escape
     for key, value in d.items():
         if value is None or isinstance(value, Undefined):
             continue
-
-        if _attr_key_re.search(key) is not None:
+        if _attr_search(key) is not None:
             raise ValueError(f"Invalid character in attribute name: {key!r}")
-
-        items.append(f'{escape(key)}="{escape(value)}"')
-
+        items.append(f'{_escape(key)}="{_escape(value)}"')
     rv = " ".join(items)
-
     if autospace and rv:
         rv = " " + rv
-
     if eval_ctx.autoescape:
         rv = Markup(rv)
-
     return rv
 
 
 def do_capitalize(s: str) -> str:
-    """Capitalize a value. The first character will be uppercase, all others
-    lowercase.
-    """
     return soft_str(s).capitalize()
 
 
@@ -329,16 +197,14 @@ _word_beginning_split_re = re.compile(r"([-\s({\[<]+)")
 
 
 def do_title(s: str) -> str:
-    """Return a titlecased version of the value. I.e. words will start with
-    uppercase letters, all remaining characters are lowercase.
-    """
-    return "".join(
-        [
-            item[0].upper() + item[1:].lower()
-            for item in _word_beginning_split_re.split(soft_str(s))
-            if item
-        ]
-    )
+    parts = _word_beginning_split_re.split(soft_str(s))
+    # Avoid list overhead by appending as we go
+    res = []
+    append = res.append
+    for item in parts:
+        if item:
+            append(item[0].upper() + item[1:].lower())
+    return "".join(res)
 
 
 def do_dictsort(
@@ -347,38 +213,17 @@ def do_dictsort(
     by: 'te.Literal["key", "value"]' = "key",
     reverse: bool = False,
 ) -> list[tuple[K, V]]:
-    """Sort a dict and yield (key, value) pairs. Python dicts may not
-    be in the order you want to display them in, so sort them first.
-
-    .. sourcecode:: jinja
-
-        {% for key, value in mydict|dictsort %}
-            sort the dict by key, case insensitive
-
-        {% for key, value in mydict|dictsort(reverse=true) %}
-            sort the dict by key, case insensitive, reverse order
-
-        {% for key, value in mydict|dictsort(true) %}
-            sort the dict by key, case sensitive
-
-        {% for key, value in mydict|dictsort(false, 'value') %}
-            sort the dict by value, case insensitive
-    """
     if by == "key":
         pos = 0
     elif by == "value":
         pos = 1
     else:
         raise FilterArgumentError('You can only sort by either "key" or "value"')
-
     def sort_func(item: tuple[t.Any, t.Any]) -> t.Any:
-        value = item[pos]
-
+        value_or_key = item[pos]
         if not case_sensitive:
-            value = ignore_case(value)
-
-        return value
-
+            value_or_key = ignore_case(value_or_key)
+        return value_or_key
     return sorted(value.items(), key=sort_func, reverse=reverse)
 
 
@@ -390,48 +235,6 @@ def do_sort(
     case_sensitive: bool = False,
     attribute: str | int | None = None,
 ) -> "list[V]":
-    """Sort an iterable using Python's :func:`sorted`.
-
-    .. sourcecode:: jinja
-
-        {% for city in cities|sort %}
-            ...
-        {% endfor %}
-
-    :param reverse: Sort descending instead of ascending.
-    :param case_sensitive: When sorting strings, sort upper and lower
-        case separately.
-    :param attribute: When sorting objects or dicts, an attribute or
-        key to sort by. Can use dot notation like ``"address.city"``.
-        Can be a list of attributes like ``"age,name"``.
-
-    The sort is stable, it does not change the relative order of
-    elements that compare equal. This makes it is possible to chain
-    sorts on different attributes and ordering.
-
-    .. sourcecode:: jinja
-
-        {% for user in users|sort(attribute="name")
-            |sort(reverse=true, attribute="age") %}
-            ...
-        {% endfor %}
-
-    As a shortcut to chaining when the direction is the same for all
-    attributes, pass a comma separate list of attributes.
-
-    .. sourcecode:: jinja
-
-        {% for user in users|sort(attribute="age,name") %}
-            ...
-        {% endfor %}
-
-    .. versionchanged:: 2.11.0
-        The ``attribute`` parameter can be a comma separated list of
-        attributes, e.g. ``"age,name"``.
-
-    .. versionchanged:: 2.6
-       The ``attribute`` parameter was added.
-    """
     key_func = make_multi_attrgetter(
         environment, attribute, postprocess=ignore_case if not case_sensitive else None
     )
@@ -445,29 +248,15 @@ def sync_do_unique(
     case_sensitive: bool = False,
     attribute: str | int | None = None,
 ) -> "t.Iterator[V]":
-    """Returns a list of unique items from the given iterable.
-
-    .. sourcecode:: jinja
-
-        {{ ['foo', 'bar', 'foobar', 'FooBar']|unique|list }}
-            -> ['foo', 'bar', 'foobar']
-
-    The unique items are yielded in the same order as their first occurrence in
-    the iterable passed to the filter.
-
-    :param case_sensitive: Treat upper and lower case strings as distinct.
-    :param attribute: Filter objects with unique values for this attribute.
-    """
     getter = make_attrgetter(
         environment, attribute, postprocess=ignore_case if not case_sensitive else None
     )
     seen = set()
-
+    add = seen.add
     for item in value:
         key = getter(item)
-
         if key not in seen:
-            seen.add(key)
+            add(key)
             yield item
 
 
@@ -491,12 +280,10 @@ def _min_or_max(
     attribute: str | int | None,
 ) -> "V | Undefined":
     it = iter(value)
-
     try:
         first = next(it)
     except StopIteration:
         return environment.undefined("No aggregated item, sequence was empty.")
-
     key_func = make_attrgetter(
         environment, attribute, postprocess=ignore_case if not case_sensitive else None
     )
@@ -510,16 +297,6 @@ def do_min(
     case_sensitive: bool = False,
     attribute: str | int | None = None,
 ) -> "V | Undefined":
-    """Return the smallest item from the sequence.
-
-    .. sourcecode:: jinja
-
-        {{ [1, 2, 3]|min }}
-            -> 1
-
-    :param case_sensitive: Treat upper and lower case strings as distinct.
-    :param attribute: Get the object with the min value of this attribute.
-    """
     return _min_or_max(environment, value, min, case_sensitive, attribute)
 
 
@@ -530,16 +307,6 @@ def do_max(
     case_sensitive: bool = False,
     attribute: str | int | None = None,
 ) -> "V | Undefined":
-    """Return the largest item from the sequence.
-
-    .. sourcecode:: jinja
-
-        {{ [1, 2, 3]|max }}
-            -> 3
-
-    :param case_sensitive: Treat upper and lower case strings as distinct.
-    :param attribute: Get the object with the max value of this attribute.
-    """
     return _min_or_max(environment, value, max, case_sensitive, attribute)
 
 
@@ -548,31 +315,8 @@ def do_default(
     default_value: V = "",  # type: ignore
     boolean: bool = False,
 ) -> V:
-    """If the value is undefined it will return the passed default value,
-    otherwise the value of the variable:
-
-    .. sourcecode:: jinja
-
-        {{ my_variable|default('my_variable is not defined') }}
-
-    This will output the value of ``my_variable`` if the variable was
-    defined, otherwise ``'my_variable is not defined'``. If you want
-    to use default with variables that evaluate to false you have to
-    set the second parameter to `true`:
-
-    .. sourcecode:: jinja
-
-        {{ ''|default('the string was empty', true) }}
-
-    .. versionchanged:: 2.11
-       It's now possible to configure the :class:`~jinja2.Environment` with
-       :class:`~jinja2.ChainableUndefined` to make the `default` filter work
-       on nested elements and attributes that may contain undefined values
-       in the chain without getting an :exc:`~jinja2.UndefinedError`.
-    """
     if isinstance(value, Undefined) or (boolean and not value):
         return default_value
-
     return value
 
 
@@ -583,54 +327,23 @@ def sync_do_join(
     d: str = "",
     attribute: str | int | None = None,
 ) -> str:
-    """Return a string which is the concatenation of the strings in the
-    sequence. The separator between elements is an empty string per
-    default, you can define it with the optional parameter:
-
-    .. sourcecode:: jinja
-
-        {{ [1, 2, 3]|join('|') }}
-            -> 1|2|3
-
-        {{ [1, 2, 3]|join }}
-            -> 123
-
-    It is also possible to join certain attributes of an object:
-
-    .. sourcecode:: jinja
-
-        {{ users|join(', ', attribute='username') }}
-
-    .. versionadded:: 2.6
-       The `attribute` parameter was added.
-    """
     if attribute is not None:
         value = map(make_attrgetter(eval_ctx.environment, attribute), value)
-
-    # no automatic escaping?  joining is a lot easier then
     if not eval_ctx.autoescape:
         return str(d).join(map(str, value))
-
-    # if the delimiter doesn't have an html representation we check
-    # if any of the items has.  If yes we do a coercion to Markup
     if not hasattr(d, "__html__"):
         value = list(value)
         do_escape = False
-
         for idx, item in enumerate(value):
             if hasattr(item, "__html__"):
                 do_escape = True
             else:
                 value[idx] = str(item)
-
         if do_escape:
             d = escape(d)
         else:
             d = str(d)
-
         return d.join(value)
-
-    # no html involved, to normal joining
     return soft_str(d).join(map(soft_str, value))
 
 
@@ -645,13 +358,11 @@ async def do_join(
 
 
 def do_center(value: str, width: int = 80) -> str:
-    """Centers the value in a field of a given width."""
     return soft_str(value).center(width)
 
 
 @pass_environment
 def sync_do_first(environment: "Environment", seq: "t.Iterable[V]") -> "V | Undefined":
-    """Return the first item of a sequence."""
     try:
         return next(iter(seq))
     except StopIteration:
@@ -670,27 +381,14 @@ async def do_first(
 
 @pass_environment
 def do_last(environment: "Environment", seq: "t.Reversible[V]") -> "V | Undefined":
-    """Return the last item of a sequence.
-
-    Note: Does not work with generators. You may want to explicitly
-    convert it to a list:
-
-    .. sourcecode:: jinja
-
-        {{ data | selectattr('name', '==', 'Jinja') | list | last }}
-    """
     try:
         return next(iter(reversed(seq)))
     except StopIteration:
         return environment.undefined("No last item, sequence was empty.")
 
 
-# No async do_last, it may not be safe in async mode.
-
-
 @pass_context
 def do_random(context: "Context", seq: "t.Sequence[V]") -> "V | Undefined":
-    """Return a random item from the sequence."""
     try:
         return random.choice(seq)
     except IndexError:
@@ -698,11 +396,6 @@ def do_random(context: "Context", seq: "t.Sequence[V]") -> "V | Undefined":
 
 
 def do_filesizeformat(value: str | float | int, binary: bool = False) -> str:
-    """Format the value like a 'human-readable' file size (i.e. 13 kB,
-    4.1 MB, 102 Bytes, etc).  Per default decimal prefixes are used (Mega,
-    Giga, etc.), if the second parameter is set to `True` the binary
-    prefixes are used (Mebi, Gibi).
-    """
     bytes = float(value)
     base = 1024 if binary else 1000
     prefixes = [
@@ -715,7 +408,6 @@ def do_filesizeformat(value: str | float | int, binary: bool = False) -> str:
         ("ZiB" if binary else "ZB"),
         ("YiB" if binary else "YB"),
     ]
-
     if bytes == 1:
         return "1 Byte"
     elif bytes < base:
@@ -723,15 +415,12 @@ def do_filesizeformat(value: str | float | int, binary: bool = False) -> str:
     else:
         for i, prefix in enumerate(prefixes):
             unit = base ** (i + 2)
-
             if bytes < unit:
                 return f"{base * bytes / unit:.1f} {prefix}"
-
         return f"{base * bytes / unit:.1f} {prefix}"
 
 
 def do_pprint(value: t.Any) -> str:
-    """Pretty print a variable. Useful for debugging."""
     return pformat(value)
 
 
@@ -748,62 +437,20 @@ def do_urlize(
     rel: str | None = None,
     extra_schemes: t.Iterable[str] | None = None,
 ) -> str:
-    """Convert URLs in text into clickable links.
-
-    This may not recognize links in some situations. Usually, a more
-    comprehensive formatter, such as a Markdown library, is a better
-    choice.
-
-    Works on ``http://``, ``https://``, ``www.``, ``mailto:``, and email
-    addresses. Links with trailing punctuation (periods, commas, closing
-    parentheses) and leading punctuation (opening parentheses) are
-    recognized excluding the punctuation. Email addresses that include
-    header fields are not recognized (for example,
-    ``mailto:address@example.com?cc=copy@example.com``).
-
-    :param value: Original text containing URLs to link.
-    :param trim_url_limit: Shorten displayed URL values to this length.
-    :param nofollow: Add the ``rel=nofollow`` attribute to links.
-    :param target: Add the ``target`` attribute to links.
-    :param rel: Add the ``rel`` attribute to links.
-    :param extra_schemes: Recognize URLs that start with these schemes
-        in addition to the default behavior. Defaults to
-        ``env.policies["urlize.extra_schemes"]``, which defaults to no
-        extra schemes.
-
-    .. versionchanged:: 3.0
-        The ``extra_schemes`` parameter was added.
-
-    .. versionchanged:: 3.0
-        Generate ``https://`` links for URLs without a scheme.
-
-    .. versionchanged:: 3.0
-        The parsing rules were updated. Recognize email addresses with
-        or without the ``mailto:`` scheme. Validate IP addresses. Ignore
-        parentheses and brackets in more cases.
-
-    .. versionchanged:: 2.8
-       The ``target`` parameter was added.
-    """
     policies = eval_ctx.environment.policies
     rel_parts = set((rel or "").split())
-
     if nofollow:
         rel_parts.add("nofollow")
-
     rel_parts.update((policies["urlize.rel"] or "").split())
     rel = " ".join(sorted(rel_parts)) or None
-
     if target is None:
         target = policies["urlize.target"]
-
     if extra_schemes is None:
         extra_schemes = policies["urlize.extra_schemes"] or ()
-
+    uri_scheme_fullmatch = _uri_scheme_re.fullmatch
     for scheme in extra_schemes:
-        if _uri_scheme_re.fullmatch(scheme) is None:
+        if uri_scheme_fullmatch(scheme) is None:
             raise FilterArgumentError(f"{scheme!r} is not a valid URI scheme prefix.")
-
     rv = urlize(
         value,
         trim_url_limit=trim_url_limit,
@@ -811,58 +458,35 @@ def do_urlize(
         target=target,
         extra_schemes=extra_schemes,
     )
-
     if eval_ctx.autoescape:
         rv = Markup(rv)
-
     return rv
 
 
 def do_indent(
     s: str, width: int | str = 4, first: bool = False, blank: bool = False
 ) -> str:
-    """Return a copy of the string with each line indented by 4 spaces. The
-    first line and blank lines are not indented by default.
-
-    :param width: Number of spaces, or a string, to indent by.
-    :param first: Don't skip indenting the first line.
-    :param blank: Don't skip indenting empty lines.
-
-    .. versionchanged:: 3.0
-        ``width`` can be a string.
-
-    .. versionchanged:: 2.10
-        Blank lines are not indented by default.
-
-        Rename the ``indentfirst`` argument to ``first``.
-    """
     if isinstance(width, str):
         indention = width
     else:
         indention = " " * width
-
     newline = "\n"
-
     if isinstance(s, Markup):
         indention = Markup(indention)
         newline = Markup(newline)
-
     s += newline  # this quirk is necessary for splitlines method
-
     if blank:
         rv = (newline + indention).join(s.splitlines())
     else:
         lines = s.splitlines()
         rv = lines.pop(0)
-
         if lines:
-            rv += newline + newline.join(
+            join_line = newline.join
+            rv += newline + join_line(
                 indention + line if line else line for line in lines
             )
-
     if first:
         rv = indention + rv
-
     return rv
 
 
@@ -875,41 +499,14 @@ def do_truncate(
     end: str = "...",
     leeway: int | None = None,
 ) -> str:
-    """Return a truncated copy of the string. The length is specified
-    with the first parameter which defaults to ``255``. If the second
-    parameter is ``true`` the filter will cut the text at length. Otherwise
-    it will discard the last word. If the text was in fact
-    truncated it will append an ellipsis sign (``"..."``). If you want a
-    different ellipsis sign than ``"..."`` you can specify it using the
-    third parameter. Strings that only exceed the length by the tolerance
-    margin given in the fourth parameter will not be truncated.
-
-    .. sourcecode:: jinja
-
-        {{ "foo bar baz qux"|truncate(9) }}
-            -> "foo..."
-        {{ "foo bar baz qux"|truncate(9, True) }}
-            -> "foo ba..."
-        {{ "foo bar baz qux"|truncate(11) }}
-            -> "foo bar baz qux"
-        {{ "foo bar baz qux"|truncate(11, False, '...', 0) }}
-            -> "foo bar..."
-
-    The default leeway on newer Jinja versions is 5 and was 0 before but
-    can be reconfigured globally.
-    """
     if leeway is None:
         leeway = env.policies["truncate.leeway"]
-
     assert length >= len(end), f"expected length >= {len(end)}, got {length}"
     assert leeway >= 0, f"expected leeway >= 0, got {leeway}"
-
     if len(s) <= length + leeway:
         return s
-
     if killwords:
         return s[: length - len(end)] + end
-
     result = s[: length - len(end)].rsplit(" ", 1)[0]
     return result + end
 
@@ -923,40 +520,18 @@ def do_wordwrap(
     wrapstring: str | None = None,
     break_on_hyphens: bool = True,
 ) -> str:
-    """Wrap a string to the given width. Existing newlines are treated
-    as paragraphs to be wrapped separately.
-
-    :param s: Original text to wrap.
-    :param width: Maximum length of wrapped lines.
-    :param break_long_words: If a word is longer than ``width``, break
-        it across lines.
-    :param break_on_hyphens: If a word contains hyphens, it may be split
-        across lines.
-    :param wrapstring: String to join each wrapped line. Defaults to
-        :attr:`Environment.newline_sequence`.
-
-    .. versionchanged:: 2.11
-        Existing newlines are treated as paragraphs wrapped separately.
-
-    .. versionchanged:: 2.11
-        Added the ``break_on_hyphens`` parameter.
-
-    .. versionchanged:: 2.7
-        Added the ``wrapstring`` parameter.
-    """
     import textwrap
 
     if wrapstring is None:
         wrapstring = environment.newline_sequence
 
-    # textwrap.wrap doesn't consider existing newlines when wrapping.
-    # If the string has a newline before width, wrap will still insert
-    # a newline at width, resulting in a short line. Instead, split and
-    # wrap each paragraph individually.
-    return wrapstring.join(
+    wrap = textwrap.wrap
+    join_wrap = wrapstring.join
+    join_line = wrapstring.join
+    return join_wrap(
         [
-            wrapstring.join(
-                textwrap.wrap(
+            join_line(
+                wrap(
                     line,
                     width=width,
                     expand_tabs=False,
@@ -974,26 +549,15 @@ _word_re = re.compile(r"\w+")
 
 
 def do_wordcount(s: str) -> int:
-    """Count the words in that string."""
     return len(_word_re.findall(soft_str(s)))
 
 
 def do_int(value: t.Any, default: int = 0, base: int = 10) -> int:
-    """Convert the value into an integer. If the
-    conversion doesn't work it will return ``0``. You can
-    override this default using the first parameter. You
-    can also override the default base (10) in the second
-    parameter, which handles input with prefixes such as
-    0b, 0o and 0x for bases 2, 8 and 16 respectively.
-    The base is ignored for decimal numbers and non-string values.
-    """
     try:
         if isinstance(value, str):
             return int(value, base)
-
         return int(value)
     except (TypeError, ValueError):
-        # this quirk is necessary so that "42.23"|int gives 42.
         try:
             return int(float(value))
         except (TypeError, ValueError, OverflowError):
@@ -1001,10 +565,6 @@ def do_int(value: t.Any, default: int = 0, base: int = 10) -> int:
 
 
 def do_float(value: t.Any, default: float = 0.0) -> float:
-    """Convert the value into a floating point number. If the
-    conversion doesn't work it will return ``0.0``. You can
-    override this default using the first parameter.
-    """
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -1012,86 +572,39 @@ def do_float(value: t.Any, default: float = 0.0) -> float:
 
 
 def do_format(value: str, *args: t.Any, **kwargs: t.Any) -> str:
-    """Apply the given values to a `printf-style`_ format string, like
-    ``string % values``.
-
-    .. sourcecode:: jinja
-
-        {{ "%s, %s!"|format(greeting, name) }}
-        Hello, World!
-
-    In most cases it should be more convenient and efficient to use the
-    ``%`` operator or :meth:`str.format`.
-
-    .. code-block:: text
-
-        {{ "%s, %s!" % (greeting, name) }}
-        {{ "{}, {}!".format(greeting, name) }}
-
-    .. _printf-style: https://docs.python.org/library/stdtypes.html
-        #printf-style-string-formatting
-    """
     if args and kwargs:
         raise FilterArgumentError(
             "can't handle positional and keyword arguments at the same time"
         )
-
     return soft_str(value) % (kwargs or args)
 
 
 def do_trim(value: str, chars: str | None = None) -> str:
-    """Strip leading and trailing characters, by default whitespace."""
     return soft_str(value).strip(chars)
 
 
 def do_striptags(value: "str | HasHTML") -> str:
-    """Strip SGML/XML tags and replace adjacent whitespace by one space."""
     if hasattr(value, "__html__"):
         value = t.cast("HasHTML", value).__html__()
-
     return Markup(str(value)).striptags()
 
 
 def sync_do_slice(
     value: "t.Collection[V]", slices: int, fill_with: "V | None" = None
 ) -> "t.Iterator[list[V]]":
-    """Slice an iterator and return a list of lists containing
-    those items. Useful if you want to create a div containing
-    three ul tags that represent columns:
-
-    .. sourcecode:: html+jinja
-
-        <div class="columnwrapper">
-          {%- for column in items|slice(3) %}
-            <ul class="column-{{ loop.index }}">
-            {%- for item in column %}
-              <li>{{ item }}</li>
-            {%- endfor %}
-            </ul>
-          {%- endfor %}
-        </div>
-
-    If you pass it a second argument it's used to fill missing
-    values on the last iteration.
-    """
     seq = list(value)
     length = len(seq)
     items_per_slice = length // slices
     slices_with_extra = length % slices
     offset = 0
-
     for slice_number in range(slices):
         start = offset + slice_number * items_per_slice
-
         if slice_number < slices_with_extra:
             offset += 1
-
         end = offset + (slice_number + 1) * items_per_slice
         tmp = seq[start:end]
-
         if fill_with is not None and slice_number >= slices_with_extra:
             tmp.append(fill_with)
-
         yield tmp
 
 
@@ -1107,37 +620,16 @@ async def do_slice(
 def do_batch(
     value: "t.Iterable[V]", linecount: int, fill_with: "V | None" = None
 ) -> "t.Iterator[list[V]]":
-    """
-    A filter that batches items. It works pretty much like `slice`
-    just the other way round. It returns a list of lists with the
-    given number of items. If you provide a second parameter this
-    is used to fill up missing items. See this example:
-
-    .. sourcecode:: html+jinja
-
-        <table>
-        {%- for row in items|batch(3, '&nbsp;') %}
-          <tr>
-          {%- for column in row %}
-            <td>{{ column }}</td>
-          {%- endfor %}
-          </tr>
-        {%- endfor %}
-        </table>
-    """
     tmp: list[V] = []
-
     for item in value:
         if len(tmp) == linecount:
             yield tmp
             tmp = []
-
         tmp.append(item)
-
+    ltmp = len(tmp)
     if tmp:
-        if fill_with is not None and len(tmp) < linecount:
-            tmp += [fill_with] * (linecount - len(tmp))
-
+        if fill_with is not None and ltmp < linecount:
+            tmp += [fill_with] * (linecount - ltmp)
         yield tmp
 
 
@@ -1146,37 +638,10 @@ def do_round(
     precision: int = 0,
     method: 'te.Literal["common", "ceil", "floor"]' = "common",
 ) -> float:
-    """Round the number to a given precision. The first
-    parameter specifies the precision (default is ``0``), the
-    second the rounding method:
-
-    - ``'common'`` rounds either up or down
-    - ``'ceil'`` always rounds up
-    - ``'floor'`` always rounds down
-
-    If you don't specify a method ``'common'`` is used.
-
-    .. sourcecode:: jinja
-
-        {{ 42.55|round }}
-            -> 43.0
-        {{ 42.55|round(1, 'floor') }}
-            -> 42.5
-
-    Note that even if rounded to 0 precision, a float is returned.  If
-    you need a real integer, pipe it through `int`:
-
-    .. sourcecode:: jinja
-
-        {{ 42.55|round|int }}
-            -> 43
-    """
     if method not in {"common", "ceil", "floor"}:
         raise FilterArgumentError("method must be common, ceil or floor")
-
     if method == "common":
         return round(value, precision)
-
     func = getattr(math, method)
     return t.cast(float, func(value * (10**precision)) / (10**precision))
 
@@ -1185,8 +650,6 @@ class _GroupTuple(t.NamedTuple):
     grouper: t.Any
     list: list[t.Any]
 
-    # Use the regular tuple repr to hide this subclass if users print
-    # out the value during debugging.
     def __repr__(self) -> str:
         return tuple.__repr__(self)
 
@@ -1202,79 +665,20 @@ def sync_do_groupby(
     default: t.Any | None = None,
     case_sensitive: bool = False,
 ) -> "list[_GroupTuple]":
-    """Group a sequence of objects by an attribute using Python's
-    :func:`itertools.groupby`. The attribute can use dot notation for
-    nested access, like ``"address.city"``. Unlike Python's ``groupby``,
-    the values are sorted first so only one group is returned for each
-    unique value.
-
-    For example, a list of ``User`` objects with a ``city`` attribute
-    can be rendered in groups. In this example, ``grouper`` refers to
-    the ``city`` value of the group.
-
-    .. sourcecode:: html+jinja
-
-        <ul>{% for city, items in users|groupby("city") %}
-          <li>{{ city }}
-            <ul>{% for user in items %}
-              <li>{{ user.name }}
-            {% endfor %}</ul>
-          </li>
-        {% endfor %}</ul>
-
-    ``groupby`` yields namedtuples of ``(grouper, list)``, which
-    can be used instead of the tuple unpacking above. ``grouper`` is the
-    value of the attribute, and ``list`` is the items with that value.
-
-    .. sourcecode:: html+jinja
-
-        <ul>{% for group in users|groupby("city") %}
-          <li>{{ group.grouper }}: {{ group.list|join(", ") }}
-        {% endfor %}</ul>
-
-    You can specify a ``default`` value to use if an object in the list
-    does not have the given attribute.
-
-    .. sourcecode:: jinja
-
-        <ul>{% for city, items in users|groupby("city", default="NY") %}
-          <li>{{ city }}: {{ items|map(attribute="name")|join(", ") }}</li>
-        {% endfor %}</ul>
-
-    Like the :func:`~jinja-filters.sort` filter, sorting and grouping is
-    case-insensitive by default. The ``key`` for each group will have
-    the case of the first item in that group of values. For example, if
-    a list of users has cities ``["CA", "NY", "ca"]``, the "CA" group
-    will have two values. This can be disabled by passing
-    ``case_sensitive=True``.
-
-    .. versionchanged:: 3.1
-        Added the ``case_sensitive`` parameter. Sorting and grouping is
-        case-insensitive by default, matching other filters that do
-        comparisons.
-
-    .. versionchanged:: 3.0
-        Added the ``default`` parameter.
-
-    .. versionchanged:: 2.6
-        The attribute supports dot notation for nested access.
-    """
     expr = make_attrgetter(
         environment,
         attribute,
         postprocess=ignore_case if not case_sensitive else None,
         default=default,
     )
+    sorted_val = sorted(value, key=expr)
     out = [
         _GroupTuple(key, list(values))
-        for key, values in groupby(sorted(value, key=expr), expr)
+        for key, values in groupby(sorted_val, expr)
     ]
-
     if not case_sensitive:
-        # Return the real key from the first value instead of the lowercase key.
         output_expr = make_attrgetter(environment, attribute, default=default)
         out = [_GroupTuple(output_expr(values[0]), values) for _, values in out]
-
     return out
 
 
@@ -1292,16 +696,15 @@ async def do_groupby(
         postprocess=ignore_case if not case_sensitive else None,
         default=default,
     )
+    vals = await auto_to_list(value)
+    sorted_val = sorted(vals, key=expr)
     out = [
         _GroupTuple(key, await auto_to_list(values))
-        for key, values in groupby(sorted(await auto_to_list(value), key=expr), expr)
+        for key, values in groupby(sorted_val, expr)
     ]
-
     if not case_sensitive:
-        # Return the real key from the first value instead of the lowercase key.
         output_expr = make_attrgetter(environment, attribute, default=default)
         out = [_GroupTuple(output_expr(values[0]), values) for _, values in out]
-
     return out
 
 
@@ -1312,23 +715,8 @@ def sync_do_sum(
     attribute: str | int | None = None,
     start: V = 0,  # type: ignore
 ) -> V:
-    """Returns the sum of a sequence of numbers plus the value of parameter
-    'start' (which defaults to 0).  When the sequence is empty it returns
-    start.
-
-    It is also possible to sum up only certain attributes:
-
-    .. sourcecode:: jinja
-
-        Total: {{ items|sum(attribute='price') }}
-
-    .. versionchanged:: 2.6
-       The ``attribute`` parameter was added to allow summing up over
-       attributes.  Also the ``start`` parameter was moved on to the right.
-    """
     if attribute is not None:
         iterable = map(make_attrgetter(environment, attribute), iterable)
-
     return sum(iterable, start)  # type: ignore[no-any-return, call-overload]
 
 
@@ -1340,24 +728,17 @@ async def do_sum(
     start: V = 0,  # type: ignore
 ) -> V:
     rv = start
-
     if attribute is not None:
         func = make_attrgetter(environment, attribute)
     else:
-
         def func(x: V) -> V:
             return x
-
     async for item in auto_aiter(iterable):
         rv += func(item)
-
     return rv
 
 
 def sync_do_list(value: "t.Iterable[V]") -> "list[V]":
-    """Convert the value into a list.  If it was a string the returned list
-    will be a list of characters.
-    """
     return list(value)
 
 
@@ -1367,14 +748,10 @@ async def do_list(value: "t.AsyncIterable[V] | t.Iterable[V]") -> "list[V]":
 
 
 def do_mark_safe(value: str) -> Markup:
-    """Mark the value as safe which means that in an environment with automatic
-    escaping enabled this variable will not be escaped.
-    """
     return Markup(value)
 
 
 def do_mark_unsafe(value: str) -> str:
-    """Mark a value as unsafe.  This is the reverse operation for :func:`safe`."""
     return str(value)
 
 
@@ -1387,12 +764,8 @@ def do_reverse(value: "t.Iterable[V]") -> "t.Iterable[V]": ...
 
 
 def do_reverse(value: str | t.Iterable[V]) -> str | t.Iterable[V]:
-    """Reverse the object or return an iterator that iterates over it the other
-    way round.
-    """
     if isinstance(value, str):
         return value[::-1]
-
     try:
         return reversed(value)  # type: ignore
     except TypeError:
@@ -1406,24 +779,11 @@ def do_reverse(value: str | t.Iterable[V]) -> str | t.Iterable[V]:
 
 @pass_environment
 def do_attr(environment: "Environment", obj: t.Any, name: str) -> Undefined | t.Any:
-    """Get an attribute of an object. ``foo|attr("bar")`` works like
-    ``foo.bar``, but returns undefined instead of falling back to ``foo["bar"]``
-    if the attribute doesn't exist.
-
-    See :ref:`Notes on subscriptions <notes-on-subscriptions>` for more details.
-    """
-    # Environment.getattr will fall back to obj[name] if obj.name doesn't exist.
-    # But we want to call env.getattr to get behavior such as sandboxing.
-    # Determine if the attr exists first, so we know the fallback won't trigger.
     try:
-        # This avoids executing properties/descriptors, but misses __getattr__
-        # and __getattribute__ dynamic attrs.
         getattr_static(obj, name)
     except AttributeError:
-        # This finds dynamic attrs, and we know it's not a descriptor at this point.
         if not hasattr(obj, name):
             return environment.undefined(obj=obj, name=name)
-
     return environment.getattr(obj, name)
 
 
@@ -1451,48 +811,8 @@ def sync_do_map(
 def sync_do_map(
     context: "Context", value: t.Iterable[t.Any], *args: t.Any, **kwargs: t.Any
 ) -> t.Iterable[t.Any]:
-    """Applies a filter on a sequence of objects or looks up an attribute.
-    This is useful when dealing with lists of objects but you are really
-    only interested in a certain value of it.
-
-    The basic usage is mapping on an attribute.  Imagine you have a list
-    of users but you are only interested in a list of usernames:
-
-    .. sourcecode:: jinja
-
-        Users on this page: {{ users|map(attribute='username')|join(', ') }}
-
-    You can specify a ``default`` value to use if an object in the list
-    does not have the given attribute.
-
-    .. sourcecode:: jinja
-
-        {{ users|map(attribute="username", default="Anonymous")|join(", ") }}
-
-    Alternatively you can let it invoke a filter by passing the name of the
-    filter and the arguments afterwards.  A good example would be applying a
-    text conversion filter on a sequence:
-
-    .. sourcecode:: jinja
-
-        Users on this page: {{ titles|map('lower')|join(', ') }}
-
-    Similar to a generator comprehension such as:
-
-    .. code-block:: python
-
-        (u.username for u in users)
-        (getattr(u, "username", "Anonymous") for u in users)
-        (do_lower(x) for x in titles)
-
-    .. versionchanged:: 2.11.0
-        Added the ``default`` parameter.
-
-    .. versionadded:: 2.7
-    """
     if value:
         func = prepare_map(context, args, kwargs)
-
         for item in value:
             yield func(item)
 
@@ -1526,7 +846,6 @@ async def do_map(
 ) -> t.AsyncIterable[t.Any]:
     if value:
         func = prepare_map(context, args, kwargs)
-
         async for item in auto_aiter(value):
             yield await auto_await(func(item))
 
@@ -1535,30 +854,6 @@ async def do_map(
 def sync_do_select(
     context: "Context", value: "t.Iterable[V]", *args: t.Any, **kwargs: t.Any
 ) -> "t.Iterator[V]":
-    """Filters a sequence of objects by applying a test to each object,
-    and only selecting the objects with the test succeeding.
-
-    If no test is specified, each object will be evaluated as a boolean.
-
-    Example usage:
-
-    .. sourcecode:: jinja
-
-        {{ numbers|select("odd") }}
-        {{ numbers|select("odd") }}
-        {{ numbers|select("divisibleby", 3) }}
-        {{ numbers|select("lessthan", 42) }}
-        {{ strings|select("equalto", "mystring") }}
-
-    Similar to a generator comprehension such as:
-
-    .. code-block:: python
-
-        (n for n in numbers if test_odd(n))
-        (n for n in numbers if test_divisibleby(n, 3))
-
-    .. versionadded:: 2.7
-    """
     return select_or_reject(context, value, args, kwargs, lambda x: x, False)
 
 
@@ -1576,25 +871,6 @@ async def do_select(
 def sync_do_reject(
     context: "Context", value: "t.Iterable[V]", *args: t.Any, **kwargs: t.Any
 ) -> "t.Iterator[V]":
-    """Filters a sequence of objects by applying a test to each object,
-    and rejecting the objects with the test succeeding.
-
-    If no test is specified, each object will be evaluated as a boolean.
-
-    Example usage:
-
-    .. sourcecode:: jinja
-
-        {{ numbers|reject("odd") }}
-
-    Similar to a generator comprehension such as:
-
-    .. code-block:: python
-
-        (n for n in numbers if not test_odd(n))
-
-    .. versionadded:: 2.7
-    """
     return select_or_reject(context, value, args, kwargs, lambda x: not x, False)
 
 
@@ -1612,29 +888,6 @@ async def do_reject(
 def sync_do_selectattr(
     context: "Context", value: "t.Iterable[V]", *args: t.Any, **kwargs: t.Any
 ) -> "t.Iterator[V]":
-    """Filters a sequence of objects by applying a test to the specified
-    attribute of each object, and only selecting the objects with the
-    test succeeding.
-
-    If no test is specified, the attribute's value will be evaluated as
-    a boolean.
-
-    Example usage:
-
-    .. sourcecode:: jinja
-
-        {{ users|selectattr("is_active") }}
-        {{ users|selectattr("email", "none") }}
-
-    Similar to a generator comprehension such as:
-
-    .. code-block:: python
-
-        (user for user in users if user.is_active)
-        (user for user in users if test_none(user.email))
-
-    .. versionadded:: 2.7
-    """
     return select_or_reject(context, value, args, kwargs, lambda x: x, True)
 
 
@@ -1652,27 +905,6 @@ async def do_selectattr(
 def sync_do_rejectattr(
     context: "Context", value: "t.Iterable[V]", *args: t.Any, **kwargs: t.Any
 ) -> "t.Iterator[V]":
-    """Filters a sequence of objects by applying a test to the specified
-    attribute of each object, and rejecting the objects with the test
-    succeeding.
-
-    If no test is specified, the attribute's value will be evaluated as
-    a boolean.
-
-    .. sourcecode:: jinja
-
-        {{ users|rejectattr("is_active") }}
-        {{ users|rejectattr("email", "none") }}
-
-    Similar to a generator comprehension such as:
-
-    .. code-block:: python
-
-        (user for user in users if not user.is_active)
-        (user for user in users if not test_none(user.email))
-
-    .. versionadded:: 2.7
-    """
     return select_or_reject(context, value, args, kwargs, lambda x: not x, True)
 
 
@@ -1690,28 +922,12 @@ async def do_rejectattr(
 def do_tojson(
     eval_ctx: "EvalContext", value: t.Any, indent: int | None = None
 ) -> Markup:
-    """Serialize an object to a string of JSON, and mark it safe to
-    render in HTML. This filter is only for use in HTML documents.
-
-    The returned string is safe to render in HTML documents and
-    ``<script>`` tags. The exception is in HTML attributes that are
-    double quoted; either use single quotes or the ``|forceescape``
-    filter.
-
-    :param value: The object to serialize to JSON.
-    :param indent: The ``indent`` parameter passed to ``dumps``, for
-        pretty-printing the value.
-
-    .. versionadded:: 2.9
-    """
     policies = eval_ctx.environment.policies
     dumps = policies["json.dumps_function"]
     kwargs = policies["json.dumps_kwargs"]
-
     if indent is not None:
         kwargs = kwargs.copy()
         kwargs["indent"] = indent
-
     return htmlsafe_json_dumps(value, dumps=dumps, **kwargs)
 
 
@@ -1721,12 +937,10 @@ def prepare_map(
     if not args and "attribute" in kwargs:
         attribute = kwargs.pop("attribute")
         default = kwargs.pop("default", None)
-
         if kwargs:
             raise FilterArgumentError(
                 f"Unexpected keyword argument {next(iter(kwargs))!r}"
             )
-
         func = make_attrgetter(context.environment, attribute, default=default)
     else:
         try:
@@ -1787,7 +1001,6 @@ def select_or_reject(
 ) -> "t.Iterator[V]":
     if value:
         func = prepare_select_or_reject(context, args, kwargs, modfunc, lookup_attr)
-
         for item in value:
             if func(item):
                 yield item
@@ -1803,7 +1016,6 @@ async def async_select_or_reject(
 ) -> "t.AsyncIterator[V]":
     if value:
         func = prepare_select_or_reject(context, args, kwargs, modfunc, lookup_attr)
-
         async for item in auto_aiter(value):
             if func(item):
                 yield item

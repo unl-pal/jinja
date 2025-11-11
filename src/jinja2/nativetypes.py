@@ -14,14 +14,6 @@ from .environment import Template
 
 
 def native_concat(values: t.Iterable[t.Any]) -> t.Any | None:
-    """Return a native Python type from the list of compiled nodes. If
-    the result is a single node, its value is returned. Otherwise, the
-    nodes are concatenated as strings. If the result can be parsed with
-    :func:`ast.literal_eval`, the parsed value is returned. Otherwise,
-    the string is returned.
-
-    :param values: Iterable of outputs to concatenate.
-    """
     head = list(islice(values, 2))
 
     if not head:
@@ -34,13 +26,10 @@ def native_concat(values: t.Iterable[t.Any]) -> t.Any | None:
     else:
         if isinstance(values, GeneratorType):
             values = chain(head, values)
-        raw = "".join([str(v) for v in values])
+        raw = "".join(str(v) for v in values)
 
     try:
         return literal_eval(
-            # In Python 3.10+ ast.literal_eval removes leading spaces/tabs
-            # from the given string. For backwards compatibility we need to
-            # parse the string ourselves without removing leading spaces/tabs.
             parse(raw, mode="eval")
         )
     except (ValueError, SyntaxError, MemoryError):
@@ -57,7 +46,7 @@ class NativeCodeGenerator(CodeGenerator):
         return value
 
     def _output_const_repr(self, group: t.Iterable[t.Any]) -> str:
-        return repr("".join([str(v) for v in group]))
+        return repr("".join(str(v) for v in group))
 
     def _output_child_to_const(
         self, node: nodes.Expr, frame: Frame, finalize: CodeGenerator._FinalizeInfo
@@ -96,12 +85,6 @@ class NativeTemplate(Template):
     environment_class = NativeEnvironment
 
     def render(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        """Render the template to produce a native Python type. If the
-        result is a single node, its value is returned. Otherwise, the
-        nodes are concatenated as strings. If the result can be parsed
-        with :func:`ast.literal_eval`, the parsed value is returned.
-        Otherwise, the string is returned.
-        """
         ctx = self.new_context(dict(*args, **kwargs))
 
         try:

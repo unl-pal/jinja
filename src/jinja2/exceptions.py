@@ -2,6 +2,8 @@ import typing as t
 
 if t.TYPE_CHECKING:
     from .runtime import Undefined
+else:
+    Undefined = None  # type: ignore
 
 
 class TemplateError(Exception):
@@ -35,9 +37,11 @@ class TemplateNotFound(IOError, LookupError, TemplateError):
         IOError.__init__(self, name)
 
         if message is None:
-            from .runtime import Undefined
-
-            if isinstance(name, Undefined):
+            # Use the hoisted Undefined from global scope (avoids repetitive import).
+            _Undefined = Undefined
+            if _Undefined is None:
+                from .runtime import Undefined as _Undefined
+            if isinstance(name, _Undefined):
                 name._fail_with_undefined_error()
 
             message = name
@@ -68,15 +72,20 @@ class TemplatesNotFound(TemplateNotFound):
         message: str | None = None,
     ) -> None:
         if message is None:
-            from .runtime import Undefined
+            # Use the hoisted Undefined from global scope (avoids repetitive import).
+            _Undefined = Undefined
+            if _Undefined is None:
+                from .runtime import Undefined as _Undefined
 
             parts = []
+            _isinstance = isinstance
+            _append = parts.append
 
             for name in names:
-                if isinstance(name, Undefined):
-                    parts.append(name._undefined_message)
+                if _isinstance(name, _Undefined):
+                    _append(name._undefined_message)
                 else:
-                    parts.append(name)
+                    _append(name)
 
             parts_str = ", ".join(map(str, parts))
             message = f"none of the templates given were found: {parts_str}"
@@ -119,8 +128,9 @@ class TemplateSyntaxError(TemplateError):
 
         # if the source is set, add the line to the output
         if self.source is not None:
+            source_lines = self.source.splitlines()
             try:
-                line = self.source.splitlines()[self.lineno - 1]
+                line = source_lines[self.lineno - 1]
             except IndexError:
                 pass
             else:

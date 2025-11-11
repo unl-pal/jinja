@@ -291,7 +291,11 @@ class Token(t.NamedTuple):
 
     def test_any(self, *iterable: str) -> bool:
         """Test against multiple token expressions."""
-        return any(self.test(expr) for expr in iterable)
+        ttest = self.test
+        for expr in iterable:
+            if ttest(expr):
+                return True
+        return False
 
 
 class TokenStreamIterator:
@@ -361,8 +365,9 @@ class TokenStream:
 
     def skip(self, n: int = 1) -> None:
         """Got n tokens ahead."""
+        next_ = next
         for _ in range(n):
-            next(self)
+            next_(self)
 
     def next_if(self, expr: str) -> Token | None:
         """Perform the token test and return the token if it matched.
@@ -404,20 +409,21 @@ class TokenStream:
         """Expect a given token type and return it.  This accepts the same
         argument as :meth:`jinja2.lexer.Token.test`.
         """
-        if not self.current.test(expr):
-            expr = describe_token_expr(expr)
+        curr = self.current
+        if not curr.test(expr):
+            expr_desc = describe_token_expr(expr)
 
-            if self.current.type is TOKEN_EOF:
+            if curr.type is TOKEN_EOF:
                 raise TemplateSyntaxError(
-                    f"unexpected end of template, expected {expr!r}.",
-                    self.current.lineno,
+                    f"unexpected end of template, expected {expr_desc!r}.",
+                    curr.lineno,
                     self.name,
                     self.filename,
                 )
 
             raise TemplateSyntaxError(
-                f"expected token {expr!r}, got {describe_token(self.current)!r}",
-                self.current.lineno,
+                f"expected token {expr_desc!r}, got {describe_token(curr)!r}",
+                curr.lineno,
                 self.name,
                 self.filename,
             )
@@ -621,48 +627,64 @@ class Lexer:
         """This is called with the stream as returned by `tokenize` and wraps
         every token in a :class:`Token` and converts the value.
         """
+        ignored_tokens_local = ignored_tokens
+        operators_local = operators
+        _normalize_newlines = self._normalize_newlines
+        TOKEN_LINESTATEMENT_BEGIN_local = TOKEN_LINESTATEMENT_BEGIN
+        TOKEN_BLOCK_BEGIN_local = TOKEN_BLOCK_BEGIN
+        TOKEN_LINESTATEMENT_END_local = TOKEN_LINESTATEMENT_END
+        TOKEN_BLOCK_END_local = TOKEN_BLOCK_END
+        TOKEN_RAW_BEGIN_local = TOKEN_RAW_BEGIN
+        TOKEN_RAW_END_local = TOKEN_RAW_END
+        TOKEN_DATA_local = TOKEN_DATA
+        TOKEN_NAME_local = TOKEN_NAME
+        TOKEN_STRING_local = TOKEN_STRING
+        TOKEN_INTEGER_local = TOKEN_INTEGER
+        TOKEN_FLOAT_local = TOKEN_FLOAT
+        TOKEN_OPERATOR_local = TOKEN_OPERATOR
+
         for lineno, token, value_str in stream:
-            if token in ignored_tokens:
+            if token in ignored_tokens_local:
                 continue
 
             value: t.Any = value_str
 
-            if token == TOKEN_LINESTATEMENT_BEGIN:
-                token = TOKEN_BLOCK_BEGIN
-            elif token == TOKEN_LINESTATEMENT_END:
-                token = TOKEN_BLOCK_END
+            if token == TOKEN_LINESTATEMENT_BEGIN_local:
+                token = TOKEN_BLOCK_BEGIN_local
+            elif token == TOKEN_LINESTATEMENT_END_local:
+                token = TOKEN_BLOCK_END_local
             # we are not interested in those tokens in the parser
-            elif token in (TOKEN_RAW_BEGIN, TOKEN_RAW_END):
+            elif token in (TOKEN_RAW_BEGIN_local, TOKEN_RAW_END_local):
                 continue
-            elif token == TOKEN_DATA:
-                value = self._normalize_newlines(value_str)
+            elif token == TOKEN_DATA_local:
+                value = _normalize_newlines(value_str)
             elif token == "keyword":
                 token = value_str
-            elif token == TOKEN_NAME:
+            elif token == TOKEN_NAME_local:
                 value = value_str
 
                 if not value.isidentifier():
                     raise TemplateSyntaxError(
                         "Invalid character in identifier", lineno, name, filename
                     )
-            elif token == TOKEN_STRING:
+            elif token == TOKEN_STRING_local:
                 # try to unescape string
                 try:
                     value = (
-                        self._normalize_newlines(value_str[1:-1])
+                        _normalize_newlines(value_str[1:-1])
                         .encode("ascii", "backslashreplace")
                         .decode("unicode-escape")
                     )
                 except Exception as e:
                     msg = str(e).split(":")[-1].strip()
                     raise TemplateSyntaxError(msg, lineno, name, filename) from e
-            elif token == TOKEN_INTEGER:
+            elif token == TOKEN_INTEGER_local:
                 value = int(value_str.replace("_", ""), 0)
-            elif token == TOKEN_FLOAT:
+            elif token == TOKEN_FLOAT_local:
                 # remove all "_" first to support more Python versions
                 value = literal_eval(value_str.replace("_", ""))
-            elif token == TOKEN_OPERATOR:
-                token = operators[value_str]
+            elif token == TOKEN_OPERATOR_local:
+                token = operators_local[value_str]
 
             yield Token(lineno, token, value)
 
@@ -680,7 +702,11 @@ class Lexer:
             Only ``\\n``, ``\\r\\n`` and ``\\r`` are treated as line
             breaks.
         """
-        lines = newline_re.split(source)[::2]
+        newline_re_local = newline_re
+        whitespace_re_local = whitespace_re
+        ignore_if_empty_local = ignore_if_empty
+
+        lines = newline_re_local.split(source)[::2]
 
         if not self.keep_trailing_newline and lines[-1] == "":
             del lines[-1]
@@ -694,7 +720,8 @@ class Lexer:
             assert state in ("variable", "block"), "invalid state"
             stack.append(state + "_begin")
 
-        statetokens = self.rules[stack[-1]]
+        rules = self.rules
+        statetokens = rules[stack[-1]]
         source_length = len(source)
         balancing_stack: list[str] = []
         newlines_stripped = 0
@@ -752,9 +779,10 @@ class Lexer:
                             if l_pos > 0 or line_starting:
                                 # If there's only whitespace between the newline and the
                                 # tag, strip it.
-                                if whitespace_re.fullmatch(text, l_pos):
+                                if whitespace_re_local.fullmatch(text, l_pos):
                                     groups = [text[:l_pos], *groups[1:]]
 
+                    range_len = len(tokens)
                     for idx, token in enumerate(tokens):
                         # failure group
                         if isinstance(token, Failure):
@@ -763,7 +791,8 @@ class Lexer:
                         # yield for the current token the first named
                         # group that matched
                         elif token == "#bygroup":
-                            for key, value in m.groupdict().items():
+                            m_groupdict = m.groupdict()
+                            for key, value in m_groupdict.items():
                                 if value is not None:
                                     yield lineno, key, value
                                     lineno += value.count("\n")
@@ -777,7 +806,7 @@ class Lexer:
                         else:
                             data = groups[idx]
 
-                            if data or token not in ignore_if_empty:
+                            if data or token not in ignore_if_empty_local:
                                 yield lineno, token, data  # type: ignore[misc]
 
                             lineno += data.count("\n") + newlines_stripped
@@ -812,7 +841,7 @@ class Lexer:
                                 )
 
                     # yield items
-                    if data or tokens not in ignore_if_empty:
+                    if data or tokens not in ignore_if_empty_local:
                         yield lineno, tokens, data
 
                     lineno += data.count("\n")
@@ -830,7 +859,8 @@ class Lexer:
                         stack.pop()
                     # resolve the new state by group checking
                     elif new_state == "#bygroup":
-                        for key, value in m.groupdict().items():
+                        m_groupdict = m.groupdict()
+                        for key, value in m_groupdict.items():
                             if value is not None:
                                 stack.append(key)
                                 break
@@ -843,7 +873,7 @@ class Lexer:
                     else:
                         stack.append(new_state)
 
-                    statetokens = self.rules[stack[-1]]
+                    statetokens = rules[stack[-1]]
                 # we are still at the same position and no stack change.
                 # this means a loop without break condition, avoid that and
                 # raise error

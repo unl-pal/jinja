@@ -43,8 +43,10 @@ class NodeVisitor:
 
     def generic_visit(self, node: Node, *args: t.Any, **kwargs: t.Any) -> t.Any:
         """Called if no explicit visitor function exists for a node."""
-        for child_node in node.iter_child_nodes():
-            self.visit(child_node, *args, **kwargs)
+        iter_child_nodes = node.iter_child_nodes
+        visit = self.visit
+        for child_node in iter_child_nodes():
+            visit(child_node, *args, **kwargs)
 
 
 class NodeTransformer(NodeVisitor):
@@ -59,21 +61,28 @@ class NodeTransformer(NodeVisitor):
     """
 
     def generic_visit(self, node: Node, *args: t.Any, **kwargs: t.Any) -> Node:
-        for field, old_value in node.iter_fields():
+        iter_fields = node.iter_fields
+        visit = self.visit
+        NodeType = Node   # avoid attribute lookups inside loop
+        for field, old_value in iter_fields():
             if isinstance(old_value, list):
                 new_values = []
+                append = new_values.append
+                extend = new_values.extend
                 for value in old_value:
-                    if isinstance(value, Node):
-                        value = self.visit(value, *args, **kwargs)
-                        if value is None:
+                    if isinstance(value, NodeType):
+                        visited = visit(value, *args, **kwargs)
+                        if visited is None:
                             continue
-                        elif not isinstance(value, Node):
-                            new_values.extend(value)
+                        elif not isinstance(visited, NodeType):
+                            extend(visited)
                             continue
-                    new_values.append(value)
+                        append(visited)
+                    else:
+                        append(value)
                 old_value[:] = new_values
-            elif isinstance(old_value, Node):
-                new_node = self.visit(old_value, *args, **kwargs)
+            elif isinstance(old_value, NodeType):
+                new_node = visit(old_value, *args, **kwargs)
                 if new_node is None:
                     delattr(node, field)
                 else:

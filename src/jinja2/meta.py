@@ -25,10 +25,12 @@ class TrackingCodeGenerator(CodeGenerator):
     def enter_frame(self, frame: Frame) -> None:
         """Remember all undeclared identifiers."""
         super().enter_frame(frame)
-
-        for _, (action, param) in frame.symbols.loads.items():
-            if action == "resolve" and param not in self.environment.globals:
-                self.undeclared_identifiers.add(param)
+        loads_items = frame.symbols.loads.items()
+        env_globals = self.environment.globals
+        add_undeclared = self.undeclared_identifiers.add
+        for _, (action, param) in loads_items:
+            if action == "resolve" and param not in env_globals:
+                add_undeclared(param)
 
 
 def find_undeclared_variables(ast: nodes.Template) -> set[str]:
@@ -74,20 +76,21 @@ def find_referenced_templates(ast: nodes.Template) -> t.Iterator[str | None]:
     This function is useful for dependency tracking.  For example if you want
     to rebuild parts of the website after a layout template has changed.
     """
-    template_name: t.Any
-
+    isinstance_ = isinstance
     for node in ast.find_all(_ref_types):
         template: nodes.Expr = node.template  # type: ignore
 
-        if not isinstance(template, nodes.Const):
+        if not isinstance_(template, nodes.Const):
             # a tuple with some non consts in there
-            if isinstance(template, (nodes.Tuple, nodes.List)):
-                for template_name in template.items:
+            if isinstance_(template, (nodes.Tuple, nodes.List)):
+                template_items = template.items
+                for template_name in template_items:
                     # something const, only yield the strings and ignore
                     # non-string consts that really just make no sense
-                    if isinstance(template_name, nodes.Const):
-                        if isinstance(template_name.value, str):
-                            yield template_name.value
+                    if isinstance_(template_name, nodes.Const):
+                        value = template_name.value
+                        if isinstance_(value, str):
+                            yield value
                     # something dynamic in there
                     else:
                         yield None
@@ -96,16 +99,15 @@ def find_referenced_templates(ast: nodes.Template) -> t.Iterator[str | None]:
                 yield None
             continue
         # constant is a basestring, direct template name
-        if isinstance(template.value, str):
-            yield template.value
+        value = template.value
+        if isinstance_(value, str):
+            yield value
         # a tuple or list (latter *should* not happen) made of consts,
         # yield the consts that are strings.  We could warn here for
         # non string values
-        elif isinstance(node, nodes.Include) and isinstance(
-            template.value, (tuple, list)
-        ):
-            for template_name in template.value:
-                if isinstance(template_name, str):
+        elif isinstance_(node, nodes.Include) and isinstance_(value, (tuple, list)):
+            for template_name in value:
+                if isinstance_(template_name, str):
                     yield template_name
         # something else we don't care about, we could warn here
         else:

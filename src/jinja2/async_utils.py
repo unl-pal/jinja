@@ -11,31 +11,31 @@ if t.TYPE_CHECKING:
 
 V = t.TypeVar("V")
 
+_async_func_attrs = ("__module__", "__name__", "__qualname__")
+_normal_func_attrs = tuple(set(WRAPPER_ASSIGNMENTS).difference(_async_func_attrs))
+_common_primitives = {int, float, bool, str, list, dict, tuple, type(None)}
+_type = type
+_inspect_isawaitable = inspect.isawaitable
 
 def async_variant(normal_func):  # type: ignore
     def decorator(async_func):  # type: ignore
         pass_arg = _PassArg.from_obj(normal_func)
         need_eval_context = pass_arg is None
 
-        if pass_arg is _PassArg.environment:
+        environment_sentinel = _PassArg.environment
+        cast = t.cast
 
+        if pass_arg is environment_sentinel:
             def is_async(args: t.Any) -> bool:
-                return t.cast(bool, args[0].is_async)
-
+                return cast(bool, args[0].is_async)
         else:
-
             def is_async(args: t.Any) -> bool:
-                return t.cast(bool, args[0].environment.is_async)
+                # Use local variable to minimize attribute chain lookup
+                env = args[0].environment
+                return cast(bool, env.is_async)
 
-        # Take the doc and annotations from the sync function, but the
-        # name from the async function. Pallets-Sphinx-Themes
-        # build_function_directive expects __wrapped__ to point to the
-        # sync function.
-        async_func_attrs = ("__module__", "__name__", "__qualname__")
-        normal_func_attrs = tuple(set(WRAPPER_ASSIGNMENTS).difference(async_func_attrs))
-
-        @wraps(normal_func, assigned=normal_func_attrs)
-        @wraps(async_func, assigned=async_func_attrs, updated=())
+        @wraps(normal_func, assigned=_normal_func_attrs)
+        @wraps(async_func, assigned=_async_func_attrs, updated=())
         def wrapper(*args, **kwargs):  # type: ignore
             b = is_async(args)
 
@@ -56,15 +56,12 @@ def async_variant(normal_func):  # type: ignore
     return decorator
 
 
-_common_primitives = {int, float, bool, str, list, dict, tuple, type(None)}
-
-
 async def auto_await(value: t.Union[t.Awaitable["V"], "V"]) -> "V":
     # Avoid a costly call to isawaitable
-    if type(value) in _common_primitives:
+    if _type(value) in _common_primitives:
         return t.cast("V", value)
 
-    if inspect.isawaitable(value):
+    if _inspect_isawaitable(value):
         return await t.cast("t.Awaitable[V]", value)
 
     return value
@@ -78,8 +75,10 @@ class _IteratorToAsyncIterator(t.Generic[V]):
         return self
 
     async def __anext__(self) -> V:
+        # Use local variable for performance
+        iterator = self._iterator
         try:
-            return next(self._iterator)
+            return next(iterator)
         except StopIteration as e:
             raise StopAsyncIteration(e.value) from e
 
@@ -87,8 +86,10 @@ class _IteratorToAsyncIterator(t.Generic[V]):
 def auto_aiter(
     iterable: "t.AsyncIterable[V] | t.Iterable[V]",
 ) -> "t.AsyncIterator[V]":
-    if hasattr(iterable, "__aiter__"):
-        return iterable.__aiter__()
+    # Hoist method lookup
+    aiter = getattr(iterable, "__aiter__", None)
+    if aiter is not None:
+        return aiter()
     else:
         return _IteratorToAsyncIterator(iter(iterable))
 

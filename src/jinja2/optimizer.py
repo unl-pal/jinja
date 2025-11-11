@@ -36,13 +36,16 @@ class Optimizer(NodeTransformer):
         # Do constant folding. Some other nodes besides Expr have
         # as_const, but folding them causes errors later on.
         if isinstance(node, nodes.Expr):
+            Const = nodes.Const
+            Impossible = nodes.Impossible
+            env = self.environment
             try:
-                return nodes.Const.from_untrusted(
+                return Const.from_untrusted(
                     node.as_const(args[0] if args else None),
                     lineno=node.lineno,
-                    environment=self.environment,
+                    environment=env,
                 )
-            except nodes.Impossible:
+            except Impossible:
                 pass
 
         return node

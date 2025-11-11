@@ -138,12 +138,14 @@ def test_float(value: t.Any) -> bool:
 
 def test_lower(value: str) -> bool:
     """Return true if the variable is lowercased."""
-    return str(value).islower()
+    s = str(value)
+    return s.islower()
 
 
 def test_upper(value: str) -> bool:
     """Return true if the variable is uppercased."""
-    return str(value).isupper()
+    s = str(value)
+    return s.isupper()
 
 
 def test_string(value: t.Any) -> bool:
@@ -169,8 +171,8 @@ def test_sequence(value: t.Any) -> bool:
     that are iterable.
     """
     try:
-        len(value)
-        value.__getitem__  # noqa B018
+        vlen = len(value)
+        vgetitem = value.__getitem__  # noqa B018
     except Exception:
         return False
 
@@ -193,7 +195,7 @@ def test_sameas(value: t.Any, other: t.Any) -> bool:
 def test_iterable(value: t.Any) -> bool:
     """Check if it's possible to iterate over an object."""
     try:
-        iter(value)
+        it = iter(value)
     except TypeError:
         return False
 

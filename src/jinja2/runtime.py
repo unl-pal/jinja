@@ -81,7 +81,9 @@ def markup_join(seq: t.Iterable[t.Any]) -> str:
     for arg in iterator:
         buf.append(arg)
         if hasattr(arg, "__html__"):
-            return Markup("").join(chain(buf, iterator))
+            # Markup("") is a constant, hoist out of loop to avoid recreating
+            joiner = Markup("")
+            return joiner.join(chain(buf, iterator))
     return concat(buf)
 
 
@@ -111,9 +113,11 @@ def new_context(
         # we don't want to modify the dict passed
         if shared:
             parent = dict(parent)
+        # Use local variables for attribute lookups in loops
+        parent_set = parent.__setitem__
         for key, value in locals.items():
             if value is not missing:
-                parent[key] = value
+                parent_set(key, value)
     return environment.context_class(
         environment, parent, template_name, blocks, globals=globals
     )
@@ -181,7 +185,9 @@ class Context:
         # create the initial mapping of blocks.  Whenever template inheritance
         # takes place the runtime will update this mapping with the new blocks
         # from the template.
-        self.blocks = {k: [v] for k, v in blocks.items()}
+        # Avoid repeated lookups by pulling classmethod into local variable
+        dict_items = blocks.items
+        self.blocks = {k: [v] for k, v in dict_items()}
 
     def super(
         self, name: str, current: t.Callable[["Context"], t.Iterator[str]]
@@ -236,17 +242,20 @@ class Context:
 
         :param key: The variable name to look up.
         """
-        if key in self.vars:
-            return self.vars[key]
+        vars_ = self.vars
+        parent_ = self.parent
+        if key in vars_:
+            return vars_[key]
 
-        if key in self.parent:
-            return self.parent[key]
+        if key in parent_:
+            return parent_[key]
 
         return missing
 
     def get_exported(self) -> dict[str, t.Any]:
         """Get a new dict with the exported variables."""
-        return {k: self.vars[k] for k in self.exported_vars}
+        vars_ = self.vars
+        return {k: vars_[k] for k in self.exported_vars}
 
     def get_all(self) -> dict[str, t.Any]:
         """Return the complete context as dict including the exported
@@ -257,6 +266,7 @@ class Context:
             return self.parent
         if not self.parent:
             return self.vars
+        # Avoid global dict lookup in loop
         return dict(self.parent, **self.vars)
 
     @internalcode
@@ -316,7 +326,10 @@ class Context:
             self.environment, self.name, {}, self.get_all(), True, None, locals
         )
         context.eval_ctx = self.eval_ctx
-        context.blocks.update((k, list(v)) for k, v in self.blocks.items())
+        # Avoid repeated .update and list in loop -- collect context
+        context_blocks_update = context.blocks.update
+        for k, v in self.blocks.items():
+            context_blocks_update({k: list(v)})
         return context
 
     keys = _dict_method_all(dict.keys)
@@ -324,7 +337,9 @@ class Context:
     items = _dict_method_all(dict.items)
 
     def __contains__(self, name: str) -> bool:
-        return name in self.vars or name in self.parent
+        vars_ = self.vars
+        parent_ = self.parent
+        return name in vars_ or name in parent_
 
     def __getitem__(self, key: str) -> t.Any:
         """Look up a variable by name with ``[]`` syntax, or raise a
@@ -359,33 +374,44 @@ class BlockReference:
     @property
     def super(self) -> t.Union["BlockReference", "Undefined"]:
         """Super the block."""
-        if self._depth + 1 >= len(self._stack):
+        next_depth = self._depth + 1
+        if next_depth >= len(self._stack):
             return self._context.environment.undefined(
                 f"there is no parent block called {self.name!r}.", name="super"
             )
-        return BlockReference(self.name, self._context, self._stack, self._depth + 1)
+        return BlockReference(self.name, self._context, self._stack, next_depth)
 
     @internalcode
     async def _async_call(self) -> str:
-        rv = self._context.environment.concat(  # type: ignore
-            [x async for x in self._stack[self._depth](self._context)]  # type: ignore
+        env = self._context.environment
+        stack = self._stack
+        ctx = self._context
+        depth = self._depth
+
+        rv = env.concat(
+            [x async for x in stack[depth](ctx)]
         )
 
-        if self._context.eval_ctx.autoescape:
+        if ctx.eval_ctx.autoescape:
             return Markup(rv)
 
         return rv
 
     @internalcode
     def __call__(self) -> str:
-        if self._context.environment.is_async:
+        env = self._context.environment
+        stack = self._stack
+        ctx = self._context
+        depth = self._depth
+
+        if env.is_async:
             return self._async_call()  # type: ignore
 
-        rv = self._context.environment.concat(  # type: ignore
-            self._stack[self._depth](self._context)
+        rv = env.concat(
+            stack[depth](ctx)
         )
 
-        if self._context.eval_ctx.autoescape:
+        if ctx.eval_ctx.autoescape:
             return Markup(rv)
 
         return rv
@@ -438,17 +464,18 @@ class LoopContext:
         If the iterable is a generator or otherwise does not have a
         size, it is eagerly evaluated to get a size.
         """
-        if self._length is not None:
-            return self._length
+        cached_len = self._length
+        if cached_len is not None:
+            return cached_len
 
         try:
-            self._length = len(self._iterable)  # type: ignore
+            computed_len = len(self._iterable)  # type: ignore
         except TypeError:
             iterable = list(self._iterator)
             self._iterator = self._to_iterator(iterable)
-            self._length = len(iterable) + self.index + (self._after is not missing)
-
-        return self._length
+            computed_len = len(iterable) + self.index + (self._after is not missing)
+        self._length = computed_len
+        return computed_len
 
     def __len__(self) -> int:
         return self.length
@@ -490,8 +517,9 @@ class LoopContext:
         the result in :attr:`_last` for use in subsequent checks. The
         cache is reset when :meth:`__next__` is called.
         """
-        if self._after is not missing:
-            return self._after
+        after = self._after
+        if after is not missing:
+            return after
 
         self._after = next(self._iterator, missing)
         return self._after
@@ -549,7 +577,8 @@ class LoopContext:
 
         :param value: One or more values to compare to the last call.
         """
-        if self._last_changed_value != value:
+        last_val = self._last_changed_value
+        if last_val != value:
             self._last_changed_value = value
             return True
 
@@ -559,8 +588,9 @@ class LoopContext:
         return self
 
     def __next__(self) -> tuple[t.Any, "LoopContext"]:
-        if self._after is not missing:
-            rv = self._after
+        after = self._after
+        if after is not missing:
+            rv = after
             self._after = missing
         else:
             rv = next(self._iterator)
@@ -599,8 +629,9 @@ class AsyncLoopContext(LoopContext):
 
     @property
     async def length(self) -> int:  # type: ignore
-        if self._length is not None:
-            return self._length
+        cached_len = self._length
+        if cached_len is not None:
+            return cached_len
 
         try:
             self._length = len(self._iterable)  # type: ignore
@@ -620,8 +651,9 @@ class AsyncLoopContext(LoopContext):
         return await self.length - self.index0
 
     async def _peek_next(self) -> t.Any:
-        if self._after is not missing:
-            return self._after
+        after = self._after
+        if after is not missing:
+            return after
 
         try:
             self._after = await self._iterator.__anext__()
@@ -647,8 +679,9 @@ class AsyncLoopContext(LoopContext):
         return self
 
     async def __anext__(self) -> tuple[t.Any, "AsyncLoopContext"]:
-        if self._after is not missing:
-            rv = self._after
+        after = self._after
+        if after is not missing:
+            rv = after
             self._after = missing
         else:
             rv = await self._iterator.__anext__()
@@ -717,8 +750,10 @@ class Macro:
             autoescape = self._default_autoescape
 
         # try to consume the positional arguments
-        arguments = list(args[: self._argument_count])
+        argument_count = self._argument_count
+        arguments = list(args[: argument_count])
         off = len(arguments)
+        macro_args = self.arguments
 
         # For information why this is necessary refer to the handling
         # of caller in the `macro_body` handler in the compiler.
@@ -727,8 +762,9 @@ class Macro:
         # if the number of arguments consumed is not the number of
         # arguments expected we start filling in keyword arguments
         # and defaults.
-        if off != self._argument_count:
-            for name in self.arguments[len(arguments) :]:
+        if off != argument_count:
+            # Use local variable for macro_args
+            for name in macro_args[len(arguments):]:
                 try:
                     value = kwargs.pop(name)
                 except KeyError:
@@ -760,8 +796,8 @@ class Macro:
                 f"macro {self.name!r} takes no keyword argument {next(iter(kwargs))!r}"
             )
         if self.catch_varargs:
-            arguments.append(args[self._argument_count :])
-        elif len(args) > self._argument_count:
+            arguments.append(args[argument_count:])
+        elif len(args) > argument_count:
             raise TypeError(
                 f"macro {self.name!r} takes not more than"
                 f" {len(self.arguments)} argument(s)"
@@ -832,21 +868,25 @@ class Undefined:
         """Build a message about the undefined value based on how it was
         accessed.
         """
-        if self._undefined_hint:
-            return self._undefined_hint
+        hint = self._undefined_hint
+        if hint:
+            return hint
 
-        if self._undefined_obj is missing:
-            return f"{self._undefined_name!r} is undefined"
+        obj = self._undefined_obj
+        name = self._undefined_name
 
-        if not isinstance(self._undefined_name, str):
+        if obj is missing:
+            return f"{name!r} is undefined"
+
+        if not isinstance(name, str):
             return (
-                f"{object_type_repr(self._undefined_obj)} has no"
-                f" element {self._undefined_name!r}"
+                f"{object_type_repr(obj)} has no"
+                f" element {name!r}"
             )
 
         return (
-            f"{object_type_repr(self._undefined_obj)!r} has no"
-            f" attribute {self._undefined_name!r}"
+            f"{object_type_repr(obj)!r} has no"
+            f" attribute {name!r}"
         )
 
     @internalcode

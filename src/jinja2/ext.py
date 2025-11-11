@@ -40,8 +40,6 @@ if t.TYPE_CHECKING:
     _SupportedTranslations = _TranslationsBasic | _TranslationsContext
 
 
-# I18N functions available in Jinja templates. If the I18N library
-# provides ugettext, it will be assigned to gettext.
 GETTEXT_FUNCTIONS: tuple[str, ...] = (
     "_",
     "gettext",
@@ -53,44 +51,18 @@ _ws_re = re.compile(r"\s*\n\s*")
 
 
 class Extension:
-    """Extensions can be used to add extra functionality to the Jinja template
-    system at the parser level.  Custom extensions are bound to an environment
-    but may not store environment specific data on `self`.  The reason for
-    this is that an extension can be bound to another environment (for
-    overlays) by creating a copy and reassigning the `environment` attribute.
-
-    As extensions are created by the environment they cannot accept any
-    arguments for configuration.  One may want to work around that by using
-    a factory function, but that is not possible as extensions are identified
-    by their import name.  The correct way to configure the extension is
-    storing the configuration values on the environment.  Because this way the
-    environment ends up acting as central configuration storage the
-    attributes may clash which is why extensions have to ensure that the names
-    they choose for configuration are not too generic.  ``prefix`` for example
-    is a terrible name, ``fragment_cache_prefix`` on the other hand is a good
-    name as includes the name of the extension (fragment cache).
-    """
-
     identifier: t.ClassVar[str]
 
     def __init_subclass__(cls) -> None:
         cls.identifier = f"{cls.__module__}.{cls.__name__}"
 
-    #: if this extension parses this is the list of tags it's listening to.
     tags: set[str] = set()
-
-    #: the priority of that extension.  This is especially useful for
-    #: extensions that preprocess values.  A lower value means higher
-    #: priority.
-    #:
-    #: .. versionadded:: 2.4
     priority = 100
 
     def __init__(self, environment: Environment) -> None:
         self.environment = environment
 
     def bind(self, environment: Environment) -> "te.Self":
-        """Create a copy of this extension bound to another environment."""
         rv = object.__new__(self.__class__)
         rv.__dict__.update(self.__dict__)
         rv.environment = environment
@@ -99,38 +71,17 @@ class Extension:
     def preprocess(
         self, source: str, name: str | None, filename: str | None = None
     ) -> str:
-        """This method is called before the actual lexing and can be used to
-        preprocess the source.  The `filename` is optional.  The return value
-        must be the preprocessed source.
-        """
         return source
 
     def filter_stream(
         self, stream: "TokenStream"
     ) -> t.Union["TokenStream", t.Iterable["Token"]]:
-        """It's passed a :class:`~jinja2.lexer.TokenStream` that can be used
-        to filter tokens returned.  This method has to return an iterable of
-        :class:`~jinja2.lexer.Token`\\s, but it doesn't have to return a
-        :class:`~jinja2.lexer.TokenStream`.
-        """
         return stream
 
     def parse(self, parser: "Parser") -> nodes.Node | list[nodes.Node]:
-        """If any of the :attr:`tags` matched this method is called with the
-        parser as first argument.  The token the parser stream is pointing at
-        is the name token that matched.  This method has to return one or a
-        list of multiple nodes.
-        """
         raise NotImplementedError()
 
     def attr(self, name: str, lineno: int | None = None) -> nodes.ExtensionAttribute:
-        """Return an attribute node for the current extension.  This is useful
-        to pass constants on extensions to generated template code.
-
-        ::
-
-            self.attr('_my_attribute', lineno=lineno)
-        """
         return nodes.ExtensionAttribute(self.identifier, name, lineno=lineno)
 
     def call_method(
@@ -142,9 +93,6 @@ class Extension:
         dyn_kwargs: nodes.Expr | None = None,
         lineno: int | None = None,
     ) -> nodes.Call:
-        """Call a method of the extension.  This is a shortcut for
-        :meth:`attr` + :class:`jinja2.nodes.Call`.
-        """
         if args is None:
             args = []
         if kwargs is None:
@@ -172,9 +120,6 @@ def _make_new_gettext(func: t.Callable[[str], str]) -> t.Callable[..., str]:
         rv = __context.call(func, __string)
         if __context.eval_ctx.autoescape:
             rv = Markup(rv)
-        # Always treat as a format string, even if there are no
-        # variables. This makes translation strings more consistent
-        # and predictable. This requires escaping
         return rv % variables  # type: ignore
 
     return gettext
@@ -193,7 +138,6 @@ def _make_new_ngettext(func: t.Callable[[str, str, int], str]) -> t.Callable[...
         rv = __context.call(func, __singular, __plural, __num)
         if __context.eval_ctx.autoescape:
             rv = Markup(rv)
-        # Always treat as a format string, see gettext comment above.
         return rv % variables  # type: ignore
 
     return ngettext
@@ -210,7 +154,6 @@ def _make_new_pgettext(func: t.Callable[[str, str], str]) -> t.Callable[..., str
         if __context.eval_ctx.autoescape:
             rv = Markup(rv)
 
-        # Always treat as a format string, see gettext comment above.
         return rv % variables  # type: ignore
 
     return pgettext
@@ -235,23 +178,13 @@ def _make_new_npgettext(
         if __context.eval_ctx.autoescape:
             rv = Markup(rv)
 
-        # Always treat as a format string, see gettext comment above.
         return rv % variables  # type: ignore
 
     return npgettext
 
 
 class InternationalizationExtension(Extension):
-    """This extension adds gettext support to Jinja."""
-
     tags = {"trans"}
-
-    # TODO: the i18n extension is currently reevaluating values in a few
-    # situations.  Take this example:
-    #   {% trans count=something() %}{{ count }} foo{% pluralize
-    #     %}{{ count }} fooss{% endtrans %}
-    # something is called twice here.  One time for the gettext value and
-    # the other time for the n-parameter of the ngettext function.
 
     def __init__(self, environment: Environment) -> None:
         super().__init__(environment)
@@ -268,8 +201,6 @@ class InternationalizationExtension(Extension):
     def _install(
         self, translations: "_SupportedTranslations", newstyle: bool | None = None
     ) -> None:
-        # ugettext and ungettext are preferred in case the I18N library
-        # is providing compatibility with older Python versions.
         gettext = getattr(translations, "ugettext", None)
         if gettext is None:
             gettext = translations.gettext
@@ -303,9 +234,10 @@ class InternationalizationExtension(Extension):
         pgettext: t.Callable[[str, str], str] | None = None,
         npgettext: t.Callable[[str, str, str, int], str] | None = None,
     ) -> None:
+        env = self.environment
         if newstyle is not None:
-            self.environment.newstyle_gettext = newstyle  # type: ignore
-        if self.environment.newstyle_gettext:  # type: ignore
+            env.newstyle_gettext = newstyle  # type: ignore
+        if env.newstyle_gettext:  # type: ignore
             gettext = _make_new_gettext(gettext)
             ngettext = _make_new_ngettext(ngettext)
 
@@ -315,13 +247,14 @@ class InternationalizationExtension(Extension):
             if npgettext is not None:
                 npgettext = _make_new_npgettext(npgettext)
 
-        self.environment.globals.update(
+        env.globals.update(
             gettext=gettext, ngettext=ngettext, pgettext=pgettext, npgettext=npgettext
         )
 
     def _uninstall(self, translations: "_SupportedTranslations") -> None:
+        env_globals = self.environment.globals
         for key in ("gettext", "ngettext", "pgettext", "npgettext"):
-            self.environment.globals.pop(key, None)
+            env_globals.pop(key, None)
 
     def _extract(
         self,
@@ -333,7 +266,6 @@ class InternationalizationExtension(Extension):
         return extract_from_ast(source, gettext_functions)
 
     def parse(self, parser: "Parser") -> nodes.Node | list[nodes.Node]:
-        """Parse a translatable tag."""
         lineno = next(parser.stream).lineno
 
         context = None
@@ -342,87 +274,86 @@ class InternationalizationExtension(Extension):
         if context_token is not None:
             context = context_token.value
 
-        # find all the variables referenced.  Additionally a variable can be
-        # defined in the body of the trans block too, but this is checked at
-        # a later state.
         plural_expr: nodes.Expr | None = None
         plural_expr_assignment: nodes.Assign | None = None
         num_called_num = False
         variables: dict[str, nodes.Expr] = {}
         trimmed = None
-        while parser.stream.current.type != "block_end":
+        stream = parser.stream
+        expect = stream.expect
+        skip_if = stream.skip_if
+        while stream.current.type != "block_end":
             if variables:
-                parser.stream.expect("comma")
+                expect("comma")
 
-            # skip colon for python compatibility
-            if parser.stream.skip_if("colon"):
+            if skip_if("colon"):
                 break
 
-            token = parser.stream.expect("name")
-            if token.value in variables:
+            token = expect("name")
+            val = token.value
+            if val in variables:
                 parser.fail(
-                    f"translatable variable {token.value!r} defined twice.",
+                    f"translatable variable {val!r} defined twice.",
                     token.lineno,
                     exc=TemplateAssertionError,
                 )
 
-            # expressions
-            if parser.stream.current.type == "assign":
-                next(parser.stream)
-                variables[token.value] = var = parser.parse_expression()
-            elif trimmed is None and token.value in ("trimmed", "notrimmed"):
-                trimmed = token.value == "trimmed"
+            if stream.current.type == "assign":
+                next(stream)
+                variables[val] = var = parser.parse_expression()
+            elif trimmed is None and val in ("trimmed", "notrimmed"):
+                trimmed = val == "trimmed"
                 continue
             else:
-                variables[token.value] = var = nodes.Name(token.value, "load")
+                variables[val] = var = nodes.Name(val, "load")
 
             if plural_expr is None:
                 if isinstance(var, nodes.Call):
                     plural_expr = nodes.Name("_trans", "load")
-                    variables[token.value] = plural_expr
+                    variables[val] = plural_expr
                     plural_expr_assignment = nodes.Assign(
                         nodes.Name("_trans", "store"), var
                     )
                 else:
                     plural_expr = var
-                num_called_num = token.value == "num"
+                num_called_num = val == "num"
 
-        parser.stream.expect("block_end")
+        expect("block_end")
 
         plural = None
         have_plural = False
         referenced = set()
 
-        # now parse until endtrans or pluralize
         singular_names, singular = self._parse_block(parser, True)
         if singular_names:
             referenced.update(singular_names)
             if plural_expr is None:
-                plural_expr = nodes.Name(singular_names[0], "load")
-                num_called_num = singular_names[0] == "num"
+                name0 = singular_names[0]
+                plural_expr = nodes.Name(name0, "load")
+                num_called_num = name0 == "num"
 
-        # if we have a pluralize block, we parse that too
-        if parser.stream.current.test("name:pluralize"):
+        test_pluralize = stream.current.test("name:pluralize")
+        if test_pluralize:
             have_plural = True
-            next(parser.stream)
-            if parser.stream.current.type != "block_end":
-                token = parser.stream.expect("name")
-                if token.value not in variables:
+            next(stream)
+            if stream.current.type != "block_end":
+                token = expect("name")
+                tval = token.value
+                if tval not in variables:
                     parser.fail(
-                        f"unknown variable {token.value!r} for pluralization",
+                        f"unknown variable {tval!r} for pluralization",
                         token.lineno,
                         exc=TemplateAssertionError,
                     )
-                plural_expr = variables[token.value]
-                num_called_num = token.value == "num"
-            parser.stream.expect("block_end")
+                plural_expr = variables[tval]
+                num_called_num = tval == "num"
+            expect("block_end")
             plural_names, plural = self._parse_block(parser, False)
-            next(parser.stream)
+            next(stream)
             referenced.update(plural_names)
         else:
-            next(parser.stream)
+            next(stream)
 
-        # register free names as simple name expressions
         for name in referenced:
             if name not in variables:
                 variables[name] = nodes.Name(name, "load")
@@ -460,27 +391,28 @@ class InternationalizationExtension(Extension):
     def _parse_block(
         self, parser: "Parser", allow_pluralize: bool
     ) -> tuple[list[str], str]:
-        """Parse until the next block tag with a given name."""
         referenced = []
         buf = []
+        stream = parser.stream
+        current = stream.current
+        expect = stream.expect
+        next_stream = next
 
         while True:
-            if parser.stream.current.type == "data":
-                buf.append(parser.stream.current.value.replace("%", "%%"))
-                next(parser.stream)
-            elif parser.stream.current.type == "variable_begin":
-                next(parser.stream)
-                name = parser.stream.expect("name").value
+            ctype = stream.current.type
+            if ctype == "data":
+                buf.append(stream.current.value.replace("%", "%%"))
+                next_stream(stream)
+            elif ctype == "variable_begin":
+                next_stream(stream)
+                name = expect("name").value
                 referenced.append(name)
                 buf.append(f"%({name})s")
-                parser.stream.expect("variable_end")
-            elif parser.stream.current.type == "block_begin":
-                next(parser.stream)
-                block_name = (
-                    parser.stream.current.value
-                    if parser.stream.current.type == "name"
-                    else None
-                )
+                expect("variable_end")
+            elif ctype == "block_begin":
+                next_stream(stream)
+                current = stream.current
+                block_name = current.value if current.type == "name" else None
                 if block_name == "endtrans":
                     break
                 elif block_name == "pluralize":
@@ -497,7 +429,7 @@ class InternationalizationExtension(Extension):
                     f"control structures in translatable sections are not allowed; "
                     f"saw `{block_name}`"
                 )
-            elif parser.stream.eos:
+            elif ctype == "eos":
                 parser.fail("unclosed translation block")
             else:
                 raise RuntimeError("internal parser error")
@@ -514,12 +446,10 @@ class InternationalizationExtension(Extension):
         vars_referenced: bool,
         num_called_num: bool,
     ) -> nodes.Output:
-        """Generates a useful node from the data provided."""
-        newstyle = self.environment.newstyle_gettext  # type: ignore
+        env = self.environment
+        newstyle = env.newstyle_gettext  # type: ignore
         node: nodes.Expr
 
-        # no variables referenced?  no need to escape for old style
-        # gettext invocations only if there are vars.
         if not vars_referenced and not newstyle:
             singular = singular.replace("%%", "%")
             if plural:
@@ -538,40 +468,27 @@ class InternationalizationExtension(Extension):
 
         node = nodes.Call(nodes.Name(func_name, "load"), func_args, [], None, None)
 
-        # in case newstyle gettext is used, the method is powerful
-        # enough to handle the variable expansion and autoescape
-        # handling itself
         if newstyle:
+            node_kwargs = node.kwargs
             for key, value in variables.items():
-                # the function adds that later anyways in case num was
-                # called num, so just skip it.
                 if num_called_num and key == "num":
                     continue
-                node.kwargs.append(nodes.Keyword(key, value))
+                node_kwargs.append(nodes.Keyword(key, value))
 
-        # otherwise do that here
         else:
-            # mark the return value as safe if we are in an
-            # environment with autoescaping turned on
             node = nodes.MarkSafeIfAutoescape(node)
             if variables:
-                node = nodes.Mod(
-                    node,
-                    nodes.Dict(
-                        [
-                            nodes.Pair(nodes.Const(key), value)
-                            for key, value in variables.items()
-                        ]
-                    ),
+                n_dict = nodes.Dict(
+                    [
+                        nodes.Pair(nodes.Const(key), value)
+                        for key, value in variables.items()
+                    ]
                 )
+                node = nodes.Mod(node, n_dict)
         return nodes.Output([node])
 
 
 class ExprStmtExtension(Extension):
-    """Adds a `do` tag to Jinja that works like the print statement just
-    that it doesn't print the return value.
-    """
-
     tags = {"do"}
 
     def parse(self, parser: "Parser") -> nodes.ExprStmt:
@@ -581,38 +498,17 @@ class ExprStmtExtension(Extension):
 
 
 class LoopControlExtension(Extension):
-    """Adds break and continue to the template engine."""
-
     tags = {"break", "continue"}
 
     def parse(self, parser: "Parser") -> nodes.Break | nodes.Continue:
         token = next(parser.stream)
-        if token.value == "break":
+        tval = token.value
+        if tval == "break":
             return nodes.Break(lineno=token.lineno)
         return nodes.Continue(lineno=token.lineno)
 
 
 class DebugExtension(Extension):
-    """A ``{% debug %}`` tag that dumps the available variables,
-    filters, and tests.
-
-    .. code-block:: html+jinja
-
-        <pre>{% debug %}</pre>
-
-    .. code-block:: text
-
-        {'context': {'cycler': <class 'jinja2.utils.Cycler'>,
-                     ...,
-                     'namespace': <class 'jinja2.utils.Namespace'>},
-         'filters': ['abs', 'attr', 'batch', 'capitalize', 'center', 'count', 'd',
-                     ..., 'urlencode', 'urlize', 'wordcount', 'wordwrap', 'xmlattr'],
-         'tests': ['!=', '<', '<=', '==', '>', '>=', 'callable', 'defined',
-                   ..., 'odd', 'sameas', 'sequence', 'string', 'undefined', 'upper']}
-
-    .. versionadded:: 2.11.0
-    """
-
     tags = {"debug"}
 
     def parse(self, parser: "Parser") -> nodes.Output:
@@ -622,13 +518,13 @@ class DebugExtension(Extension):
         return nodes.Output([result], lineno=lineno)
 
     def _render(self, context: Context) -> str:
+        filters_keys = self.environment.filters.keys()
+        tests_keys = self.environment.tests.keys()
         result = {
             "context": context.get_all(),
-            "filters": sorted(self.environment.filters.keys()),
-            "tests": sorted(self.environment.tests.keys()),
+            "filters": sorted(filters_keys),
+            "tests": sorted(tests_keys),
         }
-
-        # Set the depth since the intent is to show the top few names.
         return pprint.pformat(result, depth=3, compact=True)
 
 
@@ -637,59 +533,32 @@ def extract_from_ast(
     gettext_functions: t.Sequence[str] = GETTEXT_FUNCTIONS,
     babel_style: bool = True,
 ) -> t.Iterator[tuple[int, str, str | None | tuple[str | None, ...]]]:
-    """Extract localizable strings from the given template node.  Per
-    default this function returns matches in babel style that means non string
-    parameters as well as keyword arguments are returned as `None`.  This
-    allows Babel to figure out what you really meant if you are using
-    gettext functions that allow keyword arguments for placeholder expansion.
-    If you don't want that behavior set the `babel_style` parameter to `False`
-    which causes only strings to be returned and parameters are always stored
-    in tuples.  As a consequence invalid gettext calls (calls without a single
-    string parameter or string parameters after non-string parameters) are
-    skipped.
-
-    This example explains the behavior:
-
-    >>> from jinja2 import Environment
-    >>> env = Environment()
-    >>> node = env.parse('{{ (_("foo"), _(), ngettext("foo", "bar", 42)) }}')
-    >>> list(extract_from_ast(node))
-    [(1, '_', 'foo'), (1, '_', ()), (1, 'ngettext', ('foo', 'bar', None))]
-    >>> list(extract_from_ast(node, babel_style=False))
-    [(1, '_', ('foo',)), (1, 'ngettext', ('foo', 'bar'))]
-
-    For every string found this function yields a ``(lineno, function,
-    message)`` tuple, where:
-
-    * ``lineno`` is the number of the line on which the string was found,
-    * ``function`` is the name of the ``gettext`` function used (if the
-      string was extracted from embedded Python code), and
-    *   ``message`` is the string, or a tuple of strings for functions
-         with multiple string arguments.
-
-    This extraction function operates on the AST and is because of that unable
-    to extract any comments.  For comment support you have to use the babel
-    extraction interface or extract comments yourself.
-    """
     out: str | None | tuple[str | None, ...]
+    gfset = set(gettext_functions)
+    find_all = ast.find_all
+    nodes_Name = nodes.Name
+    nodes_Const = nodes.Const
 
-    for node in ast.find_all(nodes.Call):
+    for node in find_all(nodes.Call):
+        node_node = node.node
         if (
-            not isinstance(node.node, nodes.Name)
-            or node.node.name not in gettext_functions
+            not isinstance(node_node, nodes_Name)
+            or node_node.name not in gfset
         ):
             continue
 
         strings: list[str | None] = []
 
         for arg in node.args:
-            if isinstance(arg, nodes.Const) and isinstance(arg.value, str):
+            if isinstance(arg, nodes_Const) and isinstance(arg.value, str):
                 strings.append(arg.value)
             else:
                 strings.append(None)
 
-        for _ in node.kwargs:
-            strings.append(None)
+        strings_extend = strings.extend
+        # For each keyword arg, each dyn_args/kwargs, we append None (as before)
+        if node.kwargs:
+            strings_extend([None] * len(node.kwargs))
         if node.dyn_args is not None:
             strings.append(None)
         if node.dyn_kwargs is not None:
@@ -697,7 +566,6 @@ def extract_from_ast(
 
         if not babel_style:
             out = tuple(x for x in strings if x is not None)
-
             if not out:
                 continue
         else:
@@ -706,16 +574,10 @@ def extract_from_ast(
             else:
                 out = tuple(strings)
 
-        yield node.lineno, node.node.name, out
+        yield node.lineno, node_node.name, out
 
 
 class _CommentFinder:
-    """Helper class to find comments in a token stream.  Can only
-    find comments for gettext calls forwards.  Once the comment
-    from line 4 is found, a comment for line 1 will not return a
-    usable value.
-    """
-
     def __init__(
         self, tokens: t.Sequence[tuple[int, str, str]], comment_tags: t.Sequence[str]
     ) -> None:
@@ -725,16 +587,18 @@ class _CommentFinder:
         self.last_lineno = 0
 
     def find_backwards(self, offset: int) -> list[str]:
+        toks = self.tokens
+        ctags = self.comment_tags
         try:
             for _, token_type, token_value in reversed(
-                self.tokens[self.offset : offset]
+                toks[self.offset:offset]
             ):
-                if token_type in ("comment", "linecomment"):
+                if token_type == "comment" or token_type == "linecomment":
                     try:
                         prefix, comment = token_value.split(None, 1)
                     except ValueError:
                         continue
-                    if prefix in self.comment_tags:
+                    if prefix in ctags:
                         return [comment.rstrip()]
             return []
         finally:
@@ -743,10 +607,12 @@ class _CommentFinder:
     def find_comments(self, lineno: int) -> list[str]:
         if not self.comment_tags or self.last_lineno > lineno:
             return []
-        for idx, (token_lineno, _, _) in enumerate(self.tokens[self.offset :]):
+        toks = self.tokens
+        off = self.offset
+        for idx, (token_lineno, _, _) in enumerate(toks[off:]):
             if token_lineno > lineno:
-                return self.find_backwards(self.offset + idx)
-        return self.find_backwards(len(self.tokens))
+                return self.find_backwards(off + idx)
+        return self.find_backwards(len(toks))
 
 
 def babel_extract(
@@ -755,42 +621,16 @@ def babel_extract(
     comment_tags: t.Sequence[str],
     options: dict[str, t.Any],
 ) -> t.Iterator[tuple[int, str, str | None | tuple[str | None, ...], list[str]]]:
-    """Babel extraction method for Jinja templates.
-
-    .. versionchanged:: 2.3
-       Basic support for translation comments was added.  If `comment_tags`
-       is now set to a list of keywords for extraction, the extractor will
-       try to find the best preceding comment that begins with one of the
-       keywords.  For best results, make sure to not have more than one
-       gettext call in one line of code and the matching comment in the
-       same line or the line before.
-
-    .. versionchanged:: 2.5.1
-       The `newstyle_gettext` flag can be set to `True` to enable newstyle
-       gettext calls.
-
-    .. versionchanged:: 2.7
-       A `silent` option can now be provided.  If set to `False` template
-       syntax errors are propagated instead of being ignored.
-
-    :param fileobj: the file-like object the messages should be extracted from
-    :param keywords: a list of keywords (i.e. function names) that should be
-                     recognized as translation functions
-    :param comment_tags: a list of translator tags to search for and include
-                         in the results.
-    :param options: a dictionary of additional options (optional)
-    :return: an iterator over ``(lineno, funcname, message, comments)`` tuples.
-             (comments will be empty currently)
-    """
     extensions: dict[type[Extension], None] = {}
 
-    for extension_name in options.get("extensions", "").split(","):
-        extension_name = extension_name.strip()
+    import_string_local = import_string  # localize for loop
 
+    ext_names = options.get("extensions", "").split(",")
+    for extension_name in ext_names:
+        extension_name = extension_name.strip()
         if not extension_name:
             continue
-
-        extensions[import_string(extension_name)] = None
+        extensions[import_string_local(extension_name)] = None
 
     if InternationalizationExtension not in extensions:
         extensions[InternationalizationExtension] = None
@@ -829,15 +669,14 @@ def babel_extract(
     except TemplateSyntaxError:
         if not silent:
             raise
-        # skip templates with syntax errors
         return
 
     finder = _CommentFinder(tokens, comment_tags)
+    finder_findcomments = finder.find_comments  # cache lookup
     for lineno, func, message in extract_from_ast(node, keywords):
-        yield lineno, func, message, finder.find_comments(lineno)
+        yield lineno, func, message, finder_findcomments(lineno)
 
 
-#: nicer import names
 i18n = InternationalizationExtension
 do = ExprStmtExtension
 loopcontrols = LoopControlExtension

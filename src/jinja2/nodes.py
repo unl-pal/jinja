@@ -77,10 +77,11 @@ class EvalContext:
         self, environment: "Environment", template_name: str | None = None
     ) -> None:
         self.environment = environment
-        if callable(environment.autoescape):
-            self.autoescape = environment.autoescape(template_name)
+        autoescape = environment.autoescape
+        if callable(autoescape):
+            self.autoescape = autoescape(template_name)
         else:
-            self.autoescape = environment.autoescape
+            self.autoescape = autoescape
         self.volatile = False
 
     def save(self) -> t.Mapping[str, t.Any]:
@@ -130,16 +131,18 @@ class Node(metaclass=NodeType):
         if self.abstract:
             raise TypeError("abstract nodes are not instantiable")
         if fields:
-            if len(fields) != len(self.fields):
+            field_len = len(self.fields)
+            if len(fields) != field_len:
                 if not self.fields:
                     raise TypeError(f"{type(self).__name__!r} takes 0 arguments")
                 raise TypeError(
-                    f"{type(self).__name__!r} takes 0 or {len(self.fields)}"
-                    f" argument{'s' if len(self.fields) != 1 else ''}"
+                    f"{type(self).__name__!r} takes 0 or {field_len}"
+                    f" argument{'s' if field_len != 1 else ''}"
                 )
             for name, arg in zip(self.fields, fields, strict=False):
                 setattr(self, name, arg)
-        for attr in self.attributes:
+        attrs = self.attributes
+        for attr in attrs:
             setattr(self, attr, attributes.pop(attr, None))
         if attributes:
             raise TypeError(f"unknown attribute {next(iter(attributes))!r}")
@@ -155,7 +158,8 @@ class Node(metaclass=NodeType):
         parameter or to exclude some using the `exclude` parameter.  Both
         should be sets or tuples of field names.
         """
-        for name in self.fields:
+        fields = self.fields
+        for name in fields:
             if (
                 (exclude is None and only is None)
                 or (exclude is not None and name not in exclude)
@@ -198,7 +202,8 @@ class Node(metaclass=NodeType):
         """Find all the nodes of a given type.  If the type is a tuple,
         the check is performed for any of the tuple items.
         """
-        for child in self.iter_child_nodes():
+        iter_child_nodes = self.iter_child_nodes
+        for child in iter_child_nodes():
             if isinstance(child, node_type):
                 yield child  # type: ignore
             yield from child.find_all(node_type)
@@ -212,9 +217,12 @@ class Node(metaclass=NodeType):
         todo = deque([self])
         while todo:
             node = todo.popleft()
-            if "ctx" in node.fields:
+            node_fields = node.fields
+            if "ctx" in node_fields:
                 node.ctx = ctx  # type: ignore
-            todo.extend(node.iter_child_nodes())
+            todo_extend = todo.extend
+            for child in node.iter_child_nodes():
+                todo_extend([child])
         return self
 
     def set_lineno(self, lineno: int, override: bool = False) -> "Node":
@@ -222,10 +230,13 @@ class Node(metaclass=NodeType):
         todo = deque([self])
         while todo:
             node = todo.popleft()
-            if "lineno" in node.attributes:
+            node_attrs = node.attributes
+            if "lineno" in node_attrs:
                 if node.lineno is None or override:
                     node.lineno = lineno
-            todo.extend(node.iter_child_nodes())
+            todo_extend = todo.extend
+            for child in node.iter_child_nodes():
+                todo_extend([child])
         return self
 
     def set_environment(self, environment: "Environment") -> "Node":
@@ -234,7 +245,9 @@ class Node(metaclass=NodeType):
         while todo:
             node = todo.popleft()
             node.environment = environment
-            todo.extend(node.iter_child_nodes())
+            todo_extend = todo.extend
+            for child in node.iter_child_nodes():
+                todo_extend([child])
         return self
 
     def __eq__(self, other: t.Any) -> bool:
@@ -246,8 +259,10 @@ class Node(metaclass=NodeType):
     __hash__ = object.__hash__
 
     def __repr__(self) -> str:
-        args_str = ", ".join(f"{a}={getattr(self, a, None)!r}" for a in self.fields)
-        return f"{type(self).__name__}({args_str})"
+        t_self = type(self)
+        fields = self.fields
+        args_str = ", ".join(f"{a}={getattr(self, a, None)!r}" for a in fields)
+        return f"{t_self.__name__}({args_str})"
 
     def dump(self) -> str:
         def _dump(node: Node | t.Any) -> None:
@@ -256,17 +271,18 @@ class Node(metaclass=NodeType):
                 return
 
             buf.append(f"nodes.{type(node).__name__}(")
-            if not node.fields:
+            node_fields = node.fields
+            if not node_fields:
                 buf.append(")")
                 return
-            for idx, field in enumerate(node.fields):
+            for idx, field in enumerate(node_fields):
                 if idx:
                     buf.append(", ")
                 value = getattr(node, field)
                 if isinstance(value, list):
                     buf.append("[")
-                    for idx, item in enumerate(value):
-                        if idx:
+                    for idx2, item in enumerate(value):
+                        if idx2:
                             buf.append(", ")
                         _dump(item)
                     buf.append("]")
@@ -500,12 +516,14 @@ class BinExpr(Expr):
         eval_ctx = get_eval_context(self, eval_ctx)
 
         # intercepted operators cannot be folded at compile time
+        op = self.operator
+        env = eval_ctx.environment
         if (
-            eval_ctx.environment.sandboxed
-            and self.operator in eval_ctx.environment.intercepted_binops  # type: ignore
+            env.sandboxed
+            and op in env.intercepted_binops  # type: ignore
         ):
             raise Impossible()
-        f = _binop_to_func[self.operator]
+        f = _binop_to_func[op]
         try:
             return f(self.left.as_const(eval_ctx), self.right.as_const(eval_ctx))
         except Exception as e:
@@ -524,12 +542,14 @@ class UnaryExpr(Expr):
         eval_ctx = get_eval_context(self, eval_ctx)
 
         # intercepted operators cannot be folded at compile time
+        op = self.operator
+        env = eval_ctx.environment
         if (
-            eval_ctx.environment.sandboxed
-            and self.operator in eval_ctx.environment.intercepted_unops  # type: ignore
+            env.sandboxed
+            and op in env.intercepted_unops  # type: ignore
         ):
             raise Impossible()
-        f = _uaop_to_func[self.operator]
+        f = _uaop_to_func[op]
         try:
             return f(self.node.as_const(eval_ctx))
         except Exception as e:
@@ -550,7 +570,8 @@ class Name(Expr):
     ctx: str
 
     def can_assign(self) -> bool:
-        return self.name not in {"true", "false", "none", "True", "False", "None"}
+        name = self.name
+        return name not in {"true", "false", "none", "True", "False", "None"}
 
 
 class NSRef(Expr):
@@ -632,10 +653,12 @@ class Tuple(Literal):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> tuple[t.Any, ...]:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return tuple(x.as_const(eval_ctx) for x in self.items)
+        items = self.items
+        return tuple(x.as_const(eval_ctx) for x in items)
 
     def can_assign(self) -> bool:
-        for item in self.items:
+        items = self.items
+        for item in items:
             if not item.can_assign():
                 return False
         return True
@@ -649,7 +672,8 @@ class List(Literal):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> list[t.Any]:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return [x.as_const(eval_ctx) for x in self.items]
+        items = self.items
+        return [x.as_const(eval_ctx) for x in items]
 
 
 class Dict(Literal):
@@ -662,7 +686,8 @@ class Dict(Literal):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> dict[t.Any, t.Any]:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return dict(x.as_const(eval_ctx) for x in self.items)
+        items = self.items
+        return dict(x.as_const(eval_ctx) for x in items)
 
 
 class Pair(Helper):
@@ -705,27 +730,32 @@ class CondExpr(Expr):
             return self.expr1.as_const(eval_ctx)
 
         # if we evaluate to an undefined object, we better do that at runtime
-        if self.expr2 is None:
+        expr2 = self.expr2
+        if expr2 is None:
             raise Impossible()
 
-        return self.expr2.as_const(eval_ctx)
+        return expr2.as_const(eval_ctx)
 
 
 def args_as_const(
     node: t.Union["_FilterTestCommon", "Call"], eval_ctx: EvalContext | None
 ) -> tuple[list[t.Any], dict[t.Any, t.Any]]:
-    args = [x.as_const(eval_ctx) for x in node.args]
-    kwargs = dict(x.as_const(eval_ctx) for x in node.kwargs)
+    args_nodes = node.args
+    kwargs_nodes = node.kwargs
+    args = [x.as_const(eval_ctx) for x in args_nodes]
+    kwargs = dict(x.as_const(eval_ctx) for x in kwargs_nodes)
 
-    if node.dyn_args is not None:
+    dyn_args = node.dyn_args
+    if dyn_args is not None:
         try:
-            args.extend(node.dyn_args.as_const(eval_ctx))
+            args.extend(dyn_args.as_const(eval_ctx))
         except Exception as e:
             raise Impossible() from e
 
-    if node.dyn_kwargs is not None:
+    dyn_kwargs = node.dyn_kwargs
+    if dyn_kwargs is not None:
         try:
-            kwargs.update(node.dyn_kwargs.as_const(eval_ctx))
+            kwargs.update(dyn_kwargs.as_const(eval_ctx))
         except Exception as e:
             raise Impossible() from e
 
@@ -760,7 +790,8 @@ class _FilterTestCommon(Expr):
         if func is None or pass_arg is _PassArg.context:
             raise Impossible()
 
-        if eval_ctx.environment.is_async and (
+        env = eval_ctx.environment
+        if env.is_async and (
             getattr(func, "jinja_async_variant", False) is True
             or inspect.iscoroutinefunction(func)
         ):
@@ -772,7 +803,7 @@ class _FilterTestCommon(Expr):
         if pass_arg is _PassArg.eval_context:
             args.insert(0, eval_ctx)
         elif pass_arg is _PassArg.environment:
-            args.insert(0, eval_ctx.environment)
+            args.insert(0, env)
 
         try:
             return func(*args, **kwargs)
@@ -791,7 +822,8 @@ class Filter(_FilterTestCommon):
     node: Expr | None  # type: ignore
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> t.Any:
-        if self.node is None:
+        node = self.node
+        if node is None:
             raise Impossible()
 
         return super().as_const(eval_ctx=eval_ctx)
@@ -841,7 +873,8 @@ class Getitem(Expr):
         eval_ctx = get_eval_context(self, eval_ctx)
 
         try:
-            return eval_ctx.environment.getitem(
+            env = eval_ctx.environment
+            return env.getitem(
                 self.node.as_const(eval_ctx), self.arg.as_const(eval_ctx)
             )
         except Exception as e:
@@ -865,7 +898,8 @@ class Getattr(Expr):
         eval_ctx = get_eval_context(self, eval_ctx)
 
         try:
-            return eval_ctx.environment.getattr(self.node.as_const(eval_ctx), self.attr)
+            env = eval_ctx.environment
+            return env.getattr(self.node.as_const(eval_ctx), self.attr)
         except Exception as e:
             raise Impossible() from e
 
@@ -901,7 +935,8 @@ class Concat(Expr):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> str:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return "".join(str(x.as_const(eval_ctx)) for x in self.nodes)
+        nodes = self.nodes
+        return "".join(str(x.as_const(eval_ctx)) for x in nodes)
 
 
 class Compare(Expr):
@@ -915,10 +950,13 @@ class Compare(Expr):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> t.Any:
         eval_ctx = get_eval_context(self, eval_ctx)
-        result = value = self.expr.as_const(eval_ctx)
+        expr = self.expr
+        value = expr.as_const(eval_ctx)
+        result = value
 
         try:
-            for op in self.ops:
+            ops = self.ops
+            for op in ops:
                 new_value = op.expr.as_const(eval_ctx)
                 result = _cmpop_to_func[op.op](value, new_value)
 
@@ -991,7 +1029,10 @@ class And(BinExpr):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> t.Any:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return self.left.as_const(eval_ctx) and self.right.as_const(eval_ctx)
+        left = self.left
+        if not left.as_const(eval_ctx):
+            return False
+        return self.right.as_const(eval_ctx)
 
 
 class Or(BinExpr):
@@ -1001,7 +1042,11 @@ class Or(BinExpr):
 
     def as_const(self, eval_ctx: EvalContext | None = None) -> t.Any:
         eval_ctx = get_eval_context(self, eval_ctx)
-        return self.left.as_const(eval_ctx) or self.right.as_const(eval_ctx)
+        left = self.left
+        val = left.as_const(eval_ctx)
+        if val:
+            return val
+        return self.right.as_const(eval_ctx)
 
 
 class Not(UnaryExpr):

@@ -124,29 +124,38 @@ def is_internal_attribute(obj: t.Any, attr: str) -> bool:
     >>> is_internal_attribute(str, "upper")
     False
     """
-    if isinstance(obj, types.FunctionType):
+    # Save type() locally to avoid repeated attribute lookups
+    FunctionType = types.FunctionType
+    MethodType = types.MethodType
+    CodeType = types.CodeType
+    TracebackType = types.TracebackType
+    FrameType = types.FrameType
+    GeneratorType = types.GeneratorType
+    attr_startswith_dunder = attr.startswith("__")
+
+    if isinstance(obj, FunctionType):
         if attr in UNSAFE_FUNCTION_ATTRIBUTES:
             return True
-    elif isinstance(obj, types.MethodType):
+    elif isinstance(obj, MethodType):
         if attr in UNSAFE_FUNCTION_ATTRIBUTES or attr in UNSAFE_METHOD_ATTRIBUTES:
             return True
     elif isinstance(obj, type):
         if attr == "mro":
             return True
-    elif isinstance(obj, (types.CodeType, types.TracebackType, types.FrameType)):
+    elif isinstance(obj, (CodeType, TracebackType, FrameType)):
         return True
-    elif isinstance(obj, types.GeneratorType):
+    elif isinstance(obj, GeneratorType):
         if attr in UNSAFE_GENERATOR_ATTRIBUTES:
             return True
-    elif hasattr(types, "CoroutineType") and isinstance(obj, types.CoroutineType):
+    CoroutineType = getattr(types, "CoroutineType", None)
+    if CoroutineType is not None and isinstance(obj, CoroutineType):
         if attr in UNSAFE_COROUTINE_ATTRIBUTES:
             return True
-    elif hasattr(types, "AsyncGeneratorType") and isinstance(
-        obj, types.AsyncGeneratorType
-    ):
+    AsyncGeneratorType = getattr(types, "AsyncGeneratorType", None)
+    if AsyncGeneratorType is not None and isinstance(obj, AsyncGeneratorType):
         if attr in UNSAFE_ASYNC_GENERATOR_ATTRIBUTES:
             return True
-    return attr.startswith("__")
+    return attr_startswith_dunder
 
 
 def modifies_known_mutable(obj: t.Any, attr: str) -> bool:
@@ -252,7 +261,8 @@ class SandboxedEnvironment(Environment):
         special attributes of internal python objects as returned by the
         :func:`is_internal_attribute` function.
         """
-        return not (attr.startswith("_") or is_internal_attribute(obj, attr))
+        attr_startswith_underscore = attr.startswith("_")
+        return not (attr_startswith_underscore or is_internal_attribute(obj, attr))
 
     def is_safe_callable(self, obj: t.Any) -> bool:
         """Check if an object is safely callable. By default callables
@@ -261,8 +271,11 @@ class SandboxedEnvironment(Environment):
         This also recognizes the Django convention of setting
         ``func.alters_data = True``.
         """
+        # Cache getattr() result to local for efficiency
+        unsafe_callable = getattr(obj, "unsafe_callable", False)
+        alters_data = getattr(obj, "alters_data", False)
         return not (
-            getattr(obj, "unsafe_callable", False) or getattr(obj, "alters_data", False)
+            unsafe_callable or alters_data
         )
 
     def call_binop(
@@ -292,7 +305,7 @@ class SandboxedEnvironment(Environment):
         except (TypeError, LookupError):
             if isinstance(argument, str):
                 try:
-                    attr = str(argument)
+                    attr = argument  # str(argument), but argument is already str
                 except Exception:
                     pass
                 else:
@@ -345,9 +358,16 @@ class SandboxedEnvironment(Environment):
         rather than in :meth:`call`, so that calls made without ``call`` are
         also sandboxed.
         """
+        MethodType = types.MethodType
+        BuiltinMethodType = types.BuiltinMethodType
+        # Fast-path is not instance and not name -- hoist to locals
         if not isinstance(
-            value, (types.MethodType, types.BuiltinMethodType)
-        ) or value.__name__ not in ("format", "format_map"):
+            value, (MethodType, BuiltinMethodType)
+        ):
+            return None
+
+        value_name = getattr(value, '__name__', None)
+        if value_name not in ("format", "format_map"):
             return None
 
         f_self: t.Any = value.__self__
@@ -356,7 +376,7 @@ class SandboxedEnvironment(Environment):
             return None
 
         str_type: type[str] = type(f_self)
-        is_format_map = value.__name__ == "format_map"
+        is_format_map = value_name == "format_map"
         formatter: SandboxedFormatter
 
         if isinstance(f_self, Markup):
@@ -422,11 +442,14 @@ class SandboxedFormatter(Formatter):
     ) -> tuple[t.Any, str]:
         first, rest = formatter_field_name_split(field_name)
         obj = self.get_value(first, args, kwargs)
+        # Hoist self._env.getattr/getitem to locals for loop performance
+        _getattr = self._env.getattr
+        _getitem = self._env.getitem
         for is_attr, i in rest:
             if is_attr:
-                obj = self._env.getattr(obj, i)
+                obj = _getattr(obj, i)
             else:
-                obj = self._env.getitem(obj, i)
+                obj = _getitem(obj, i)
         return obj, first
 
 
