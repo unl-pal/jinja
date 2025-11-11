@@ -1,0 +1,247 @@
+[
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/idtracking.py",
+    "optimized": true,
+    "what_changed": "- Hoisted sorted(node.stores) out of inner loop in dump_stores for Symbols for fewer calls.\n- Used local variable for self.find_ref in dump_stores inner loop to reduce repeated attribute lookup.\n- Saved node.loads.items() to local in dump_param_targets for Symbols to avoid repeated lookups.\n- Used local variable in branch_update for branch.stores to avoid repeated attribute lookup.",
+    "code_summary": "Symbol analysis and tracking in Jinja AST: tracks references and stores for nodes; visitor classes walk nodes to manage symbol information.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 3.466,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/nodes.py",
+    "optimized": true,
+    "what_changed": "- Hoisted constant/attribute lookups out of loops where safe\n- Used local variables for repeated attribute lookups within loops\n- Used 'any' and 'all' for simple existence or all-checks in place of manual loops when behavior is identical\n- No recursion replaced as only generator recursion was found and this is most efficient here\n- Ensured no behavioral/semantic change",
+    "code_summary": "Jinja2 AST node definitions and helpers for the Jinja2 templating engine",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 4.716,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/defaults.py",
+    "optimized": false,
+    "what_changed": "No changes made - there are no loops, repeated computations, or unnecessary allocations; all assignments are static and at module level.",
+    "code_summary": "Defines Jinja2 parsing defaults and default namespace and policy dictionaries."
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/bccache.py",
+    "optimized": true,
+    "what_changed": "Hoisted repeated attribute and method lookups outside loops and try-blocks; cached constants (like os.getuid()) where safe; minimized repeated os and stat operations in FileSystemBytecodeCache; used local variables for attributes inside hot code paths; avoided repeated string formatting in clear; minor reduction of Python interpreter overheads without changing semantics.",
+    "code_summary": "Implements bytecode cache systems for Jinja2: base class, filesystem and memcache implementations.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 3.665,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/filters.py",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 3.469,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/environment.py",
+    "optimized": true,
+    "what_changed": "- Hoisted repeated attribute lookups out of loops\n- Used local variable for dict .get and .update in for loops\n- Hoisted constant expressions out of loops where safe\n- Used direct attribute access for self.<attr> in inner loops\n- Minor local bindings for frequently used functions (like append) inside loops\n- No changes to public API, docstrings, or any external behavior",
+    "code_summary": "Jinja2 environment: manages templates, compilation, extension loading, and template rendering generation.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 1.909,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/nativetypes.py",
+    "optimized": true,
+    "what_changed": "- Replaced list comprehensions for string joins with generator expressions\n- Reduced unnecessary list allocation\n- Used local variables to minimize attribute lookup where relevant",
+    "code_summary": "Implements native Jinja template rendering with ast/literal_eval post-processing",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.531,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/debug.py",
+    "optimized": true,
+    "what_changed": "Hoisted repeated attribute lookups (tb.tb_frame, tb.tb_frame.f_code, tb.tb_frame.f_globals) out of while loop in rewrite_traceback_stack; converted locals dictionary lookup to local variable in get_template_locals loop; generally reduced repeated lookups inside tight loops.",
+    "code_summary": "Utilities for rewriting tracebacks and extracting template context for Jinja2 debugging.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.001,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/tests.py",
+    "optimized": true,
+    "what_changed": "Hoisted attribute lookups out of try blocks for test_sequence and test_iterable; used local variables for repeated str conversion in test_lower and test_upper; no functional changes\u2014just minor micro-optimizations to reduce Python interpreter overhead.",
+    "code_summary": "Contains builtin test functions for Jinja2's 'is' operator and a dictionary linking test names to the actual test functions or operators.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.415,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/optimizer.py",
+    "optimized": true,
+    "what_changed": "Hoisted nodes.Const and nodes.Impossible attribute lookups out of the try block in generic_visit for minor efficiency; assigned attribute self.environment to a local for repeated use within the method.",
+    "code_summary": "Optimizer that constant folds AST nodes in Jinja2, with class for transforming nodes and attempting expression folding.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.724,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/loaders.py",
+    "optimized": true,
+    "what_changed": "- Hoisted constant/attribute and method lookups outside of frequently executed loops\n- Used local variables within loops to avoid repeated attribute and method accesses\n- Reduced repeated function calls or lookups in loops or comprehensions\n- No signatures or behaviors changed.",
+    "code_summary": "Implements Jinja2 template loaders from file system, packages, dicts, and other sources.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.38,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/visitor.py",
+    "optimized": true,
+    "what_changed": "Hoisted attribute/method lookups out of loops and into locals; optimized repeated isinstance lookups; reused local variables to reduce repeated computations.",
+    "code_summary": "Provides NodeVisitor and NodeTransformer classes for traversing and modifying AST nodes using the visitor pattern.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.313,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/__init__.py",
+    "optimized": true,
+    "what_changed": "Hoisted warnings.warn and importlib.metadata.version into local variables in __getattr__ to avoid repeated attribute lookups; no functional change elsewhere.",
+    "code_summary": "Jinja2 top-level imports with lazy version attribute using __getattr__.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.945,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/exceptions.py",
+    "optimized": true,
+    "what_changed": "Hoisted type imports out of loops in constructors; used local variables where possible inside loops to avoid repeated attribute lookups; stored result of splitlines() in a local variable to avoid calling it multiple times when extracting source lines in TemplateSyntaxError.__str__.",
+    "code_summary": "Defines core Jinja exception classes such as TemplateError, TemplateNotFound, TemplateSyntaxError, and others.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.804,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/constants.py",
+    "optimized": false,
+    "what_changed": "No optimization needed; single triple-quoted assignment is already optimal",
+    "code_summary": "Defines a constant string of lorem ipsum words used by a helper function"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/utils.py",
+    "optimized": true,
+    "what_changed": "- Hoisted attribute/method lookups or constant expressions out of loops where safe\n- Used local variables in loops to avoid repeated attribute access\n- Simplified some list builds using built-ins\n- Removed unnecessary list copying when iterating or building results\n- No change to behavior, comments, or docstrings",
+    "code_summary": "Jinja2 utility functions and classes for template and environment management.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.682,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/parser.py",
+    "optimized": true,
+    "what_changed": "- Cached repeated 'self.stream.current' lookups inside loops to a local variable in parsing methods\n- Cached repeated attribute and method lookups of objects in tight loops\n- Moved repeated constant/global lookups (e.g., _math_nodes, _compare_operators) to local variables inside loops\n- Used local variables for attributes inside inner loops when beneficial\n- Did not alter function signatures or any docstrings/comments",
+    "code_summary": "Jinja2 template parser converting token streams to AST nodes",
+    "tests_passed": false,
+    "test_exit": 1,
+    "test_duration_sec": 2.309,
+    "action": "reverted_to_original",
+    "logs": {
+      "stdout": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/parser.py.20251110T210928.out.txt",
+      "stderr": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/parser.py.20251110T210928.err.txt",
+      "meta": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/parser.py.20251110T210928.meta.txt"
+    }
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/ext.py",
+    "optimized": true,
+    "what_changed": "Hoisted constants and repeated attribute lookups out of loops, replaced repetitive .items() iteration with local variable, moved set lookups to locals, cached lookups for repeated use, used local variables inside tight loops for efficiency.",
+    "code_summary": "Defines Jinja2 extension interface, i18n, expression and control flow extensions, and utilities for translation extraction.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 1.968,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/compiler.py",
+    "optimized": true,
+    "what_changed": "- Hoisted repeated attribute and method lookups out of loops where safe\n- Cached len, sorted, and some constants where they are repeatedly used inside loops or functions\n- Used list comprehensions/built-ins for trivial accumulation\n- Used local function references and variables inside performance-sensitive code where appropriate\n- Avoided unnecessary re-computation and redundant object lookups\n- No behavior, public signature, or docstring changes.",
+    "code_summary": "Jinja2 template compiler: compiles AST nodes into efficient Python code with optimization and code generation helpers.",
+    "tests_passed": false,
+    "test_exit": 2,
+    "test_duration_sec": 0.837,
+    "action": "reverted_to_original",
+    "logs": {
+      "stdout": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/compiler.py.20251110T211112.out.txt",
+      "stderr": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/compiler.py.20251110T211112.err.txt",
+      "meta": "/home/fatemeh/Desktop/copy/projecttest/projecttest/energyagent/runs/tests/compiler.py.20251110T211112.meta.txt"
+    }
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/_identifier.py",
+    "optimized": false,
+    "what_changed": "No changes made; code only compiles a regex as module-global, no loops, no repeated computations, and as efficient as possible for intended use.",
+    "code_summary": "Compiles identifier Unicode regex for module use."
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/lexer.py",
+    "optimized": true,
+    "what_changed": "- Hoisted invariants and attribute lookups out of hot loops (notably in tokeniter and wrap)\n- Cached functions and repeated global lookups in tight loops as locals\n- Replaced repeated calculations with local variables\n- Used local variables for attribute lookups inside frequently-called methods\n- No changes to public function signatures, docstrings, or comments",
+    "code_summary": "Lexer implementation for Jinja2 templates, separating template and Python code using regular expressions and token streams.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.078,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/runtime.py",
+    "optimized": true,
+    "what_changed": "- Hoisted constant/attribute lookups out of loops in several methods\n- Cached repeated calculations in property methods of LoopContext for 'length', 'index', etc.\n- Used local variables inside loops where it aids attribute/method access\n- Avoided recreating sets/lists/dicts inside loops or properties\n- No change to public signatures, comments, or docstrings",
+    "code_summary": "Jinja2 template runtime: context, loop, macro, and undefined logic.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.382,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/sandbox.py",
+    "optimized": true,
+    "what_changed": "- Hoisted getattr and isinstance checks out of loops when repeated\n- Saved attribute and type checks as locals in hot paths\n- Avoided repeated str(argument) calls in getitem\n- Cached value.__name__ in wrap_str_format\n- Minor local variable reuse for tighter micro-optimization\n- Avoided some dict lookups by caching locals",
+    "code_summary": "Jinja2 sandbox environment for secure template execution with attribute and operation filtering.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.203,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/async_utils.py",
+    "optimized": true,
+    "what_changed": "Hoisted constant lookups out of functions and frequently executed code; used local variables to avoid attribute lookup overhead in hot paths; reduced repeated tuple/set construction; reused local variables to minimize repeated work.",
+    "code_summary": "Async utility helpers for Jinja2, including async variant decorator, await helper, and iterator async adapters.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.79,
+    "action": "kept_optimized"
+  },
+  {
+    "file": "/home/fatemeh/jinja/src/jinja2/meta.py",
+    "optimized": true,
+    "what_changed": "- Local variable for 'self.environment.globals' in loop\n- Local variable for 'frame.symbols.loads.items' in loop\n- Hoisted 'template.items' and 'template.value' accesses into local vars in loop\n- Local variable for 'isinstance' usage",
+    "code_summary": "Utilities to analyze Jinja templates AST for variable references and dependencies.",
+    "tests_passed": true,
+    "test_exit": 0,
+    "test_duration_sec": 2.565,
+    "action": "kept_optimized"
+  }
+]
