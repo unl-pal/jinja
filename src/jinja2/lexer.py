@@ -720,6 +720,8 @@ class Lexer:
                 ):
                     continue
 
+                groupdict = m.groupdict()
+
                 # tuples support more options
                 if isinstance(tokens, tuple):
                     groups: t.Sequence[str] = m.groups()
@@ -744,7 +746,7 @@ class Lexer:
                             # lstrip is enabled.
                             and self.lstrip_blocks
                             # Not a variable expression.
-                            and not m.groupdict().get(TOKEN_VARIABLE_BEGIN)
+                            and not groupdict.get(TOKEN_VARIABLE_BEGIN)
                         ):
                             # The start of text between the last newline and the tag.
                             l_pos = text.rfind("\n") + 1
@@ -763,7 +765,7 @@ class Lexer:
                         # yield for the current token the first named
                         # group that matched
                         elif token == "#bygroup":
-                            for key, value in m.groupdict().items():
+                            for key, value in groupdict.items():
                                 if value is not None:
                                     yield lineno, key, value
                                     lineno += value.count("\n")
@@ -830,7 +832,7 @@ class Lexer:
                         stack.pop()
                     # resolve the new state by group checking
                     elif new_state == "#bygroup":
-                        for key, value in m.groupdict().items():
+                        for key, value in groupdict.items():
                             if value is not None:
                                 stack.append(key)
                                 break

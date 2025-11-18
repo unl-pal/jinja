@@ -48,11 +48,12 @@ def rewrite_traceback_stack(source: str | None = None) -> BaseException:
     while tb is not None:
         # Skip frames decorated with @internalcode. These are internal
         # calls that aren't useful in template debugging output.
-        if tb.tb_frame.f_code in internal_code:
+        frame = tb.tb_frame
+        if frame.f_code in internal_code:
             tb = tb.tb_next
             continue
 
-        template = tb.tb_frame.f_globals.get("__jinja_template__")
+        template = frame.f_globals.get("__jinja_template__")
 
         if template is not None:
             lineno = template.get_corresponding_lineno(tb.tb_lineno)

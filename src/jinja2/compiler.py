@@ -558,17 +558,18 @@ class CodeGenerator(NodeVisitor):
             for name in sorted(names):
                 if name not in id_map:
                     id_map[name] = self.temporary_identifier()
+                identifier = id_map[name]
 
                 # add check during runtime that dependencies used inside of executed
                 # blocks are defined, as this step may be skipped during compile time
                 self.writeline("try:")
                 self.indent()
-                self.writeline(f"{id_map[name]} = environment.{dependency}[{name!r}]")
+                self.writeline(f"{identifier} = environment.{dependency}[{name!r}]")
                 self.outdent()
                 self.writeline("except KeyError:")
                 self.indent()
                 self.writeline("@internalcode")
-                self.writeline(f"def {id_map[name]}(*unused):")
+                self.writeline(f"def {identifier}(*unused):")
                 self.indent()
                 self.writeline(
                     f'raise TemplateRuntimeError("No {dependency[:-1]}'
@@ -846,14 +847,15 @@ class CodeGenerator(NodeVisitor):
 
         # find all blocks
         for block in node.find_all(nodes.Block):
-            if block.name in self.blocks:
-                self.fail(f"block {block.name!r} defined twice", block.lineno)
-            self.blocks[block.name] = block
+            name = block.name
+            if name in self.blocks:
+                self.fail(f"block {name!r} defined twice", block.lineno)
+            self.blocks[name] = block
 
         # find all imports and import them
         for import_ in node.find_all(nodes.ImportedName):
-            if import_.importname not in self.import_aliases:
-                imp = import_.importname
+            imp = import_.importname
+            if imp not in self.import_aliases:
                 self.import_aliases[imp] = alias = self.temporary_identifier()
                 if "." in imp:
                     module, obj = imp.rsplit(".", 1)
@@ -1129,11 +1131,12 @@ class CodeGenerator(NodeVisitor):
                 name, alias = name
             else:
                 alias = name
+            ref = frame.symbols.ref(alias)
             self.writeline(
-                f"{frame.symbols.ref(alias)} ="
+                f"{ref} ="
                 f" getattr(included_template, {name!r}, missing)"
             )
-            self.writeline(f"if {frame.symbols.ref(alias)} is missing:")
+            self.writeline(f"if {ref} is missing:")
             self.indent()
             # The position will contain the template name, and will be formatted
             # into a string that will be compiled into an f-string. Curly braces
@@ -1146,7 +1149,7 @@ class CodeGenerator(NodeVisitor):
                 f" does not export the requested name {name!r}"
             )
             self.writeline(
-                f"{frame.symbols.ref(alias)} = undefined(f{message!r}, name={name!r})"
+                f"{ref} = undefined(f{message!r}, name={name!r})"
             )
             self.outdent()
             if frame.toplevel:
