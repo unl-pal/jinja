@@ -1,0 +1,182 @@
+[
+  {
+    "file": "/tmp/input.py",
+    "optimized": false,
+    "what_changed": "none",
+    "code_summary": "Symbol table analysis and visitor classes for tracking name contexts in template ASTs.",
+    "raw_header": "{\"file\":\"/tmp/input.py\",\"optimized\":false,\"what_changed\":\"none\",\"code_summary\":\"Symbol table analysis and visitor classes for tracking name contexts in template ASTs.\"}\n"
+  },
+  {
+    "file": "/project/src/jinja2/nodes.py",
+    "optimized": false,
+    "what_changed": "No changes made.",
+    "code_summary": "AST node definitions and helpers for the Jinja template compiler.",
+    "raw_header": "{\"file\":\"/project/src/jinja2/nodes.py\",\"optimized\":false,\"what_changed\":\"No changes made.\",\"code_summary\":\"AST node definitions and helpers for the Jinja template compiler.\"}\n"
+  },
+  {
+    "file": "/input.py",
+    "optimized": false,
+    "what_changed": "No performance-sensitive loops or recursions to optimize",
+    "code_summary": "Module defining default configuration constants, filters, tests, and namespace helpers for a templating system.",
+    "raw_header": "{\"file\":\"/input.py\",\"optimized\":false,\"what_changed\":\"No performance-sensitive loops or recursions to optimize\",\"code_summary\":\"Module defining default configuration constants, filters, tests, and namespace helpers for a templating system.\"}\n"
+  },
+  {
+    "file": "/path/to/bccache.py",
+    "optimized": false,
+    "what_changed": "none",
+    "code_summary": "Implements bytecode cache classes and utilities for Jinja2.",
+    "raw_header": "{\"file\": \"/path/to/bccache.py\", \"optimized\": false, \"what_changed\": \"none\", \"code_summary\": \"Implements bytecode cache classes and utilities for Jinja2.\"}\n"
+  },
+  {
+    "file": "/project/filters.py",
+    "optimized": false,
+    "what_changed": "No changes made; no safe loop optimizations applied.",
+    "code_summary": "Definitions of Jinja template filters and helper utilities.",
+    "raw_header": "{\"file\":\"/project/filters.py\",\"optimized\":false,\"what_changed\":\"No changes made; no safe loop optimizations applied.\",\"code_summary\":\"Definitions of Jinja template filters and helper utilities.\"}\n"
+  },
+  {
+    "file": "/project/jinja2/environment.py",
+    "optimized": false,
+    "what_changed": "No changes made",
+    "code_summary": "Defines Environment, Template, TemplateModule, TemplateExpression, and TemplateStream classes for Jinja template management",
+    "raw_header": "{\"file\":\"/project/jinja2/environment.py\",\"optimized\":false,\"what_changed\":\"No changes made\",\"code_summary\":\"Defines Environment, Template, TemplateModule, TemplateExpression, and TemplateStream classes for Jinja template management\"}\n"
+  },
+  {
+    "file": "/project/native_template.py",
+    "optimized": false,
+    "what_changed": "No changes made; no eligible loops or allowed local optimizations.",
+    "code_summary": "Implements native template rendering using custom CodeGenerator and Environment.",
+    "raw_header": "{\"file\":\"/project/native_template.py\",\"optimized\":false,\"what_changed\":\"No changes made; no eligible loops or allowed local optimizations.\",\"code_summary\":\"Implements native template rendering using custom CodeGenerator and Environment.\"}\n"
+  },
+  {
+    "file": "/tmp/traceback.py",
+    "optimized": true,
+    "what_changed": "Introduced a local variable for the current traceback frame inside the main loop to avoid repeated attribute lookups.",
+    "code_summary": "Rewrites traceback stack and generates template-aware tracebacks with context locals for template errors.",
+    "raw_header": "{\"file\":\"/tmp/traceback.py\",\"optimized\":true,\"what_changed\":\"Introduced a local variable for the current traceback frame inside the main loop to avoid repeated attribute lookups.\",\"code_summary\":\"Rewrites traceback stack and generates template-aware tracebacks with context locals for template errors.\",\"optimized\":true}\n",
+    "action": "wrote_optimized_without_tests"
+  },
+  {
+    "file": "/tmp/input.py",
+    "optimized": false,
+    "what_changed": "none",
+    "code_summary": "Defines builtin template tests for the 'is' operator.",
+    "raw_header": "{\"file\":\"/tmp/input.py\",\"optimized\":false,\"what_changed\":\"none\",\"code_summary\":\"Defines builtin template tests for the 'is' operator.\"}\n"
+  },
+  {
+    "file": "/project/optimizer.py",
+    "optimized": false,
+    "what_changed": "No modifications were performed because the code contains no applicable loops or recursive patterns for the allowed optimizations.",
+    "code_summary": "Defines an AST optimizer performing constant folding on Expr nodes using a NodeTransformer.",
+    "raw_header": "{\"file\":\"/project/optimizer.py\",\"optimized\":false,\"what_changed\":\"No modifications were performed because the code contains no applicable loops or recursive patterns for the allowed optimizations.\",\"code_summary\":\"Defines an AST optimizer performing constant folding on Expr nodes using a NodeTransformer.\"}\n"
+  },
+  {
+    "file": "/absolute/path/to/jinja2/loaders.py",
+    "optimized": false,
+    "what_changed": "no changes were made; no safe loop-local optimizations applicable",
+    "code_summary": "Various template loaders for Jinja2, handling files, packages, dicts, functions, prefixes, and compiled modules.",
+    "raw_header": "{\"file\": \"/absolute/path/to/jinja2/loaders.py\", \"optimized\": false, \"what_changed\": \"no changes were made; no safe loop-local optimizations applicable\", \"code_summary\": \"Various template loaders for Jinja2, handling files, packages, dicts, functions, prefixes, and compiled modules.\"}\n"
+  },
+  {
+    "file": "/tmp/input.py",
+    "optimized": false,
+    "what_changed": "No changes made; code already conforms to allowed loop optimizations.",
+    "code_summary": "Defines AST NodeVisitor and NodeTransformer classes for traversing and transforming AST nodes.",
+    "raw_header": "{\"file\":\"/tmp/input.py\",\"optimized\":false,\"what_changed\":\"No changes made; code already conforms to allowed loop optimizations.\",\"code_summary\":\"Defines AST NodeVisitor and NodeTransformer classes for traversing and transforming AST nodes.\"}\n"
+  },
+  {
+    "file": "/tmp/jinja2/__init__.py",
+    "optimized": false,
+    "what_changed": "No changes made.",
+    "code_summary": "Jinja package __init__ exposes imports and handles deprecated __version__ access.",
+    "raw_header": "{\"file\":\"/tmp/jinja2/__init__.py\",\"optimized\":false,\"what_changed\":\"No changes made.\",\"code_summary\":\"Jinja package __init__ exposes imports and handles deprecated __version__ access.\"}\n"
+  },
+  {
+    "file": "/project/input.py",
+    "optimized": false,
+    "what_changed": "No changes made.",
+    "code_summary": "Defines template-related exception hierarchy for a template engine, including syntax, runtime, and undefined errors.",
+    "raw_header": "{\"file\": \"/project/input.py\", \"optimized\": false, \"what_changed\": \"No changes made.\", \"code_summary\": \"Defines template-related exception hierarchy for a template engine, including syntax, runtime, and undefined errors.\"}\n"
+  },
+  {
+    "file": "/input.py",
+    "optimized": false,
+    "what_changed": "No changes made; file only defines a constant list of Lorem Ipsum words.",
+    "code_summary": "Defines a string containing numerous Lorem Ipsum words used by the lipsum helper function.",
+    "raw_header": "{\"file\":\"/input.py\",\"optimized\":false,\"what_changed\":\"No changes made; file only defines a constant list of Lorem Ipsum words.\",\"code_summary\":\"Defines a string containing numerous Lorem Ipsum words used by the lipsum helper function.\"}\n"
+  },
+  {
+    "file": "/src/jinja2/utils.py",
+    "optimized": false,
+    "what_changed": "No changes made.",
+    "code_summary": "Utility helpers for Jinja2 templates.",
+    "raw_header": "{\"file\":\"/src/jinja2/utils.py\",\"optimized\":false,\"what_changed\":\"No changes made.\",\"code_summary\":\"Utility helpers for Jinja2 templates.\"}\n"
+  },
+  {
+    "file": "/tmp/parser.py",
+    "optimized": true,
+    "what_changed": "Replaced manual loop returning fail on required blocks with a single any() check to minimize interpreter overhead in that branch.",
+    "code_summary": "Parser implementation for Jinja templates handling statements, expressions, and nodes.",
+    "raw_header": "{\"file\": \"/tmp/parser.py\", \"optimized\": true, \"what_changed\": \"Replaced manual loop returning fail on required blocks with a single any() check to minimize interpreter overhead in that branch.\", \"code_summary\": \"Parser implementation for Jinja templates handling statements, expressions, and nodes.\"}\n",
+    "action": "wrote_optimized_without_tests"
+  },
+  {
+    "file": "/tmp/jinja_ext.py",
+    "optimized": false,
+    "what_changed": "none",
+    "code_summary": "Jinja extension definitions for internationalization, control structures, and debug utilities.",
+    "raw_header": "{\"file\":\"/tmp/jinja_ext.py\",\"optimized\":false,\"what_changed\":\"none\",\"code_summary\":\"Jinja extension definitions for internationalization, control structures, and debug utilities.\"}\n"
+  },
+  {
+    "file": "/jinja2/compiler.py",
+    "optimized": true,
+    "what_changed": "Hoisted repeated attribute/dict lookups inside loops for block registration, imports, dependency handling, and from-import aliasing to reuse computed values.",
+    "code_summary": "Template compiler generating Python code from AST nodes while tracking context and dependencies.",
+    "raw_header": "{\"file\":\"/jinja2/compiler.py\",\"optimized\":true,\"what_changed\":\"Hoisted repeated attribute/dict lookups inside loops for block registration, imports, dependency handling, and from-import aliasing to reuse computed values.\",\"code_summary\":\"Template compiler generating Python code from AST nodes while tracking context and dependencies.\"}\n",
+    "action": "wrote_optimized_without_tests"
+  },
+  {
+    "file": "/app/generated_identifier_pattern.py",
+    "optimized": false,
+    "what_changed": "No changes made; file has no loops or other transformable sections.",
+    "code_summary": "Defines a compiled regex for identifier pattern characters.",
+    "raw_header": "{\"file\":\"/app/generated_identifier_pattern.py\",\"optimized\":false,\"what_changed\":\"No changes made; file has no loops or other transformable sections.\",\"code_summary\":\"Defines a compiled regex for identifier pattern characters.\"}\n"
+  },
+  {
+    "file": "/project/lexer.py",
+    "optimized": true,
+    "what_changed": "Cached regex groupdict lookups in the tokenizing loop to avoid redundant dict creation per match.",
+    "code_summary": "Jinja2 lexer that tokenizes template and Python code with stateful regex rules.",
+    "raw_header": "{\"file\": \"/project/lexer.py\", \"optimized\": true, \"what_changed\": \"Cached regex groupdict lookups in the tokenizing loop to avoid redundant dict creation per match.\", \"code_summary\": \"Jinja2 lexer that tokenizes template and Python code with stateful regex rules.\"}\n",
+    "action": "wrote_optimized_without_tests"
+  },
+  {
+    "file": "/absolute/path/to/runtime.py",
+    "optimized": false,
+    "what_changed": "no changes made",
+    "code_summary": "Template runtime utilities providing contexts, loops, macros, and undefined handling.",
+    "raw_header": "{\"file\": \"/absolute/path/to/runtime.py\", \"optimized\": false, \"what_changed\": \"no changes made\", \"code_summary\": \"Template runtime utilities providing contexts, loops, macros, and undefined handling.\"}\n"
+  },
+  {
+    "file": "/tmp/sandboxed_environment.py",
+    "optimized": false,
+    "what_changed": "No changes made (no applicable loop optimizations).",
+    "code_summary": "Defines sandboxed environment for safe template execution.",
+    "raw_header": "{\"file\":\"/tmp/sandboxed_environment.py\",\"optimized\":false,\"what_changed\":\"No changes made (no applicable loop optimizations).\",\"code_summary\":\"Defines sandboxed environment for safe template execution.\"}\n"
+  },
+  {
+    "file": "/tmp/input.py",
+    "optimized": false,
+    "what_changed": "No changes made; original implementation retained",
+    "code_summary": "Defines helpers for async/sync wrapper management and iterable conversions.",
+    "raw_header": "{\"file\":\"/tmp/input.py\",\"optimized\":false,\"what_changed\":\"No changes made; original implementation retained\",\"code_summary\":\"Defines helpers for async/sync wrapper management and iterable conversions.\"}\n"
+  },
+  {
+    "file": "/absolute/path/meta.py",
+    "optimized": true,
+    "what_changed": "Cached the constant template value inside the loop to avoid repeated attribute lookups when yielding referenced templates.",
+    "code_summary": "AST template introspection utilities for tracking undeclared variables and referenced templates.",
+    "raw_header": "{\"file\":\"/absolute/path/meta.py\",\"optimized\":true,\"what_changed\":\"Cached the constant template value inside the loop to avoid repeated attribute lookups when yielding referenced templates.\",\"code_summary\":\"AST template introspection utilities for tracking undeclared variables and referenced templates.\"}\n",
+    "action": "wrote_optimized_without_tests"
+  }
+]
